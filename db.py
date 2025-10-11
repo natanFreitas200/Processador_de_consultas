@@ -46,7 +46,7 @@ db_config = {
    'user': os.getenv('DB_USER'),
    'password': os.getenv('DB_PASSWORD'),
    'host': os.getenv('DB_HOST'),
-   'port': os.getenv('DB_PORT'),
+   'port': int(os.getenv('DB_PORT', 3306)),  
    'database': os.getenv('DB_DATABASE')
 }
 
@@ -60,3 +60,5 @@ if DB_SCHEMA:
             print(f"  - {col_name}: {col_type}")
 else:
     print("Failed to retrieve database schema.")
+    print(f"Configuração de conexão: {db_config}")
+    print("Verifique se o MySQL está rodando e as credenciais estão corretas.")
