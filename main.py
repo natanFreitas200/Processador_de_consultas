@@ -7,6 +7,7 @@ def main():
     print("Exemplo: SELECT nome, preco FROM produtos WHERE preco > 100;\n")
 
     qp = QueryProcessor()
+    qp.validate_query("SELECT * FROM clientes;")
 
     while True:
         query = input("SQL> ").lower().strip()
