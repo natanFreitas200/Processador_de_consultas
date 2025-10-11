@@ -1,4 +1,8 @@
 import mysql.connector
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
 
 def get_db_schema(config):
     schema = {}
@@ -38,14 +42,14 @@ def get_db_schema(config):
             cursor.close()
             cnx.close()
 
-# Configuração do banco - ajustada para o schema fornecido
 db_config = {
-    'user': 'myuser',
-    'password': '012345678',
-    'host': '127.0.0.1',
-    'port': 3306,
-    'database': 'mydb'  # Nome correto conforme o schema SQL
+   'user': os.getenv('DB_USER'),
+   'password': os.getenv('DB_PASSWORD'),
+   'host': os.getenv('DB_HOST'),
+   'port': os.getenv('DB_PORT'),
+   'database': os.getenv('DB_DATABASE')
 }
+
 
 DB_SCHEMA = get_db_schema(db_config)
 if DB_SCHEMA:
