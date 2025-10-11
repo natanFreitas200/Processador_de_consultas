@@ -40,11 +40,11 @@ def get_db_schema(config):
 
 # Configuração do banco - ajustada para o schema fornecido
 db_config = {
-    'user': 'root',
-    'password': '0123456789',
+    'user': 'myuser',
+    'password': '012345678',
     'host': '127.0.0.1',
     'port': 3306,
-    'database': 'BD_Vendas'  # Nome correto conforme o schema SQL
+    'database': 'mydb'  # Nome correto conforme o schema SQL
 }
 
 DB_SCHEMA = get_db_schema(db_config)

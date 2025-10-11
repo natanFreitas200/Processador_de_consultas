@@ -28,9 +28,9 @@ class QueryProcessor:
         if parsed is None:
             return False
         
-        tables_query = [parsed['base_table']].lower()
+        tables_query = [parsed['base_table']]
         if parsed.get('join_table'):
-            tables_query.append(parsed["join_table"].lower())
+                tables_query.append(parsed["join_table"])
         
         for table in tables_query:
             if table not in self.schema:
