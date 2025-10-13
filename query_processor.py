@@ -64,20 +64,6 @@ class QueryProcessor:
         print("✔ Consulta válida.")
         return True
     
-    def _validate_select_columns(self, columns_str, tables):
-        column_list = [col.strip() for col in columns_str.split(',')]
-        
-        for col_ident in column_list:
-            if col_ident == '*':
-                continue
-                
-            is_valid, msg = self._check_single_column(col_ident, tables)
-            if not is_valid:
-                return False, msg
-        
-        return True, "Colunas SELECT válidas."
-    
-    
     def _check_single_column(self, col_identifier, tables_in_query):
      
         
@@ -106,6 +92,22 @@ class QueryProcessor:
             if len(found_in_tables) > 1:
                 return False, f"A coluna '{column_name}' é ambígua. Especifique a tabela."
         return True, "Coluna válida."
+    
+    def _validate_select_columns(self, columns_str, tables):
+        column_list = [col.strip() for col in columns_str.split(',')]
+        
+        for col_ident in column_list:
+            if col_ident == '*':
+                continue
+                
+            is_valid, msg = self._check_single_column(col_ident, tables)
+            if not is_valid:
+                return False, msg
+        
+        return True, "Colunas SELECT válidas."
+    
+    
+  
 
     def _validate_where_columns(self, where_clause, tables_in_query):
         # Remover strings entre aspas simples e duplas antes de buscar colunas
