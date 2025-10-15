@@ -1,8 +1,9 @@
-# main.py
-import query_processor 
+import query_processor
+from conversor import RelationalAlgebraConverter
 
 def main():
     process = query_processor.QueryProcessor()
+    converter = RelationalAlgebraConverter()
     
     test_queries = [
         # Queries básicas com as tabelas que existem no banco real
@@ -89,9 +90,17 @@ def main():
         "SELECT Nome FROM produto WHERE Nome = '123';",  # OK
     ]
 
+    # Itera sobre cada consulta da lista de testes
     for query in test_queries:
-        process.validate_query(query)
+        # 1. Valida a sintaxe e a semântica da consulta contra o schema do banco
+        is_valid = process.validate_query(query)
         
+        # 2. Se a consulta for considerada válida, prossegue para a conversão
+        if is_valid:
+            # Converte a consulta SQL para sua representação em Álgebra Relacional
+            algebraic_representation = converter.convert(query)
+            # Imprime o resultado da conversão
+            print(f"  -> Álgebra Relacional: {algebraic_representation}")
 
 if __name__ == "__main__":
     main()
