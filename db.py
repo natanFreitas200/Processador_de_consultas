@@ -12,15 +12,13 @@ def get_db_schema(config):
 
         db_name = config.get('database')
 
-        # Buscar todas as tabelas do banco
         query = f"""
             SELECT TABLE_NAME FROM information_schema.tables
             WHERE table_schema = '{db_name}';
         """
         cursor.execute(query)
         tables = [table[0] for table in cursor.fetchall()]
-        
-        # Para cada tabela, buscar suas colunas com tipos de dados
+
         for table_name in tables:
             query = f"""
                 SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.columns
@@ -29,7 +27,6 @@ def get_db_schema(config):
             """
             cursor.execute(query)
             columns = cursor.fetchall()
-            # Armazenar nome da coluna e tipo de dados
             schema[table_name] = [(col[0], col[1]) for col in columns]
         
         return schema
@@ -54,7 +51,6 @@ db_config = {
 DB_SCHEMA = get_db_schema(db_config)
 if DB_SCHEMA:
     print("Database schema retrieved successfully.")
-    
 else:
     print("Failed to retrieve database schema.")
     print(f"Configuração de conexão: {db_config}")

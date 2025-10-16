@@ -1,4 +1,3 @@
-# teste_conversor.py
 from conversor import RelationalAlgebraConverter
 
 def main():

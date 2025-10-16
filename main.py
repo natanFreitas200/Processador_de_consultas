@@ -1,106 +1,74 @@
 import query_processor
-from conversor import RelationalAlgebraConverter
+
 
 def main():
     process = query_processor.QueryProcessor()
-    converter = RelationalAlgebraConverter()
+
     
     test_queries = [
-        # Queries básicas com as tabelas que existem no banco real
         "SELECT * FROM cliente;",
-        "SELECT Nome, Email FROM cliente;", 
+        "SELECT Nome, Email FROM cliente;",
         "SELECT * FROM produto;",
         "SELECT Nome, Preco FROM produto;",
-        
-        # Queries com WHERE
+
         "SELECT Nome, Preco FROM produto WHERE Preco > 50;",
         "SELECT Nome, QuantEstoque FROM produto WHERE QuantEstoque < 100;",
         "SELECT * FROM pedido WHERE Status_idStatus = 1;",
-        
-        # Queries com INNER JOIN
+
         "SELECT produto.Nome, categoria.Descricao FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria;",
         "SELECT pedido.idPedido, cliente.Nome FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente;",
         "SELECT produto.Nome, pedido_has_produto.Quantidade FROM pedido_has_produto INNER JOIN produto ON pedido_has_produto.Produto_idProduto = produto.idProduto;",
-        
-        # Queries com INNER JOIN e WHERE
+
         "SELECT produto.Nome, produto.Preco FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria WHERE categoria.Descricao = 'Eletrônicos';",
         "SELECT pedido.idPedido, pedido.ValorTotalPedido FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente WHERE cliente.Nome = 'João Silva';",
-        
-        # ===== QUERIES MAIS DIFÍCEIS E COMPLEXAS =====
-        
-        # Teste de ambiguidade de colunas (sem qualificar tabela)
-        "SELECT Nome FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria;",  # Deve detectar ambiguidade se ambas tabelas tem 'Nome'
-        
-        # WHERE com múltiplas condições complexas
-        "SELECT produto.Nome, produto.Preco FROM produto WHERE Preco > 50 AND QuantEstoque < 100 AND Preco < 500;",
-        "SELECT cliente.Nome, cliente.Email FROM cliente WHERE Nome LIKE 'João' OR Email LIKE 'gmail.com';",
-        
-        # WHERE com strings contendo palavras-chave SQL
-        "SELECT * FROM produto WHERE Nome = 'WHERE';",  # String contém palavra-chave
-        "SELECT * FROM categoria WHERE Descricao = 'SELECT AND OR';",
-        
-        # JOIN com WHERE complexo usando colunas de ambas tabelas
-        "SELECT produto.Nome, categoria.Descricao FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria WHERE produto.Preco > 100 AND categoria.Descricao = 'Eletrônicos';",
-        
-        # WHERE com operadores IN e NOT
-        "SELECT Nome FROM produto WHERE QuantEstoque IN 10 OR QuantEstoque IN 20;",
-        "SELECT * FROM cliente WHERE NOT Nome = 'João Silva';",
-        
-        # Colunas qualificadas desnecessariamente (mas válidas)
-        "SELECT cliente.Nome, cliente.Email, cliente.Telefone FROM cliente;",
-        
-        # JOIN ON com expressões complexas
-        "SELECT produto.Nome FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria AND categoria.Descricao = 'Eletrônicos';",
-        
-        # Teste de espaços extras e formatação estranha
-        "SELECT    Nome   ,   Email   FROM   cliente   WHERE   Nome   =   'João'  ;",
-        "SELECT produto.Nome,produto.Preco,produto.QuantEstoque FROM produto WHERE Preco>50;",  # Sem espaços
-        
-        # ===== QUERIES COM ERROS PARA TESTAR VALIDAÇÃO =====
-        
-        # Coluna inexistente
-        "SELECT Nome, ColunaInexistente FROM produto;",
-        "SELECT * FROM cliente WHERE CampoInvalido = 'teste';",
-        
-        # Tabela qualificada incorretamente
-        "SELECT tabela_errada.Nome FROM produto;",
-        "SELECT produto.ColunaErrada FROM produto;",
-        
-        # Ambiguidade sem JOIN (deve funcionar se só uma tabela tem a coluna)
-        "SELECT idCliente FROM cliente;",  # OK
-        
-        # JOIN com coluna errada no ON
-        "SELECT produto.Nome FROM produto INNER JOIN categoria ON produto.ColunaErrada = categoria.idCategoria;",
-        "SELECT produto.Nome FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.ColunaErrada;",
-        
-        # WHERE com coluna de tabela não incluída na query
-        "SELECT Nome FROM produto WHERE categoria.Descricao = 'Eletrônicos';",  # categoria não está no FROM
-        
-        # Sintaxes totalmente erradas
-        "SELECT * FROM tabela_inexistente;",
-        "SELECT nome clientes;",  # Sem FROM
-        "SELECT * FROM cliente INNER JOIN inexistente ON cliente.idCliente = inexistente.id;",
-        "SELECT FROM cliente;",  # Sem colunas
-        "SELECT * cliente;",  # Sem FROM
-        "SELECIONAR * FROM cliente;",  # Palavra-chave errada
-        
-        # Edge cases com números e strings
-        "SELECT Nome FROM produto WHERE Preco > 'texto';",  # Tipo errado mas sintaxe OK
-        "SELECT * FROM produto WHERE QuantEstoque = 100;",  # OK
-        "SELECT Nome FROM produto WHERE Nome = '123';",  # OK
+
+        "SELECT cliente.Nome, produto.Nome, pedido.DataPedido FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente INNER JOIN pedido_has_produto ON pedido.idPedido = pedido_has_produto.Pedido_idPedido INNER JOIN produto ON pedido_has_produto.Produto_idProduto = produto.idProduto;",
+
+        "SELECT c.Nome, p.ValorTotalPedido FROM cliente AS c INNER JOIN pedido AS p ON c.idCliente = p.Cliente_idCliente;",
+        "SELECT prod.Nome FROM produto prod WHERE prod.Preco > 100;",
+
+        "SELECT * FROM produto WHERE (Preco > 100 AND QuantEstoque < 50) OR (Preco < 20);",
+
+        "SELECT Categoria_idCategoria, COUNT(*) FROM produto GROUP BY Categoria_idCategoria;",
+        "SELECT Categoria_idCategoria, AVG(Preco) FROM produto GROUP BY Categoria_idCategoria HAVING AVG(Preco) > 200;",
+
+        "SELECT Nome FROM produto WHERE Categoria_idCategoria IN (SELECT idCategoria FROM categoria WHERE Descricao = 'Importados');",
+        "SELECT * FROM pedido WHERE Cliente_idCliente = (SELECT idCliente FROM cliente WHERE Nome = 'Maria Souza');",
+
+        "SELECT Nome, Preco FROM produto ORDER BY Preco DESC;",
+        "SELECT * FROM cliente ORDER BY Nome ASC LIMIT 10;",
+
+        "SELECT Nome, Email, FROM cliente;",
+        "SELECT Nome FROM produto WHERE Preco > 50 AND;",
+
+        "SELECT c.Nome FROM cliente AS c WHERE cliente.Nome = 'José';",
+
+        "SELECT * FROM produto INNER JOIN categoria;",
+
+        "SELECT Nome, COUNT(*) FROM produto GROUP BY Categoria_idCategoria;",
+
+        "SELECT * FROM produto HAVING AVG(Preco) > 100;",
+
+        "SELECT * FROM produto WHERE Preco =< 100;",
+
+        "SELECT Nome, -- Comentário ignorado\n Preco FROM produto;",
+
+        "SELECT Nome FROM cliente UNION SELECT Nome FROM produto;",
+
+        "SELECT id FROM cliente INNER JOIN pedido ON cliente.idCliente = pedido.Cliente_idCliente;",
+
+        "SELECT cliente.Nome, pedido.idPedido FROM cliente, pedido WHERE cliente.idCliente = pedido.Cliente_idCliente;",
+
+        "SELECT Preco * 2 AS PrecoDobrado FROM produto WHERE PrecoDobrado > 100;",
+        "SELECT * FROM produto WHERE COUNT(*) > 10;",
     ]
 
     # Itera sobre cada consulta da lista de testes
     for query in test_queries:
-        # 1. Valida a sintaxe e a semântica da consulta contra o schema do banco
+        print(f"Consulta SQL: {query}")
         is_valid = process.validate_query(query)
-        
-        # 2. Se a consulta for considerada válida, prossegue para a conversão
-        if is_valid:
-            # Converte a consulta SQL para sua representação em Álgebra Relacional
-            algebraic_representation = converter.convert(query)
-            # Imprime o resultado da conversão
-            print(f"  -> Álgebra Relacional: {algebraic_representation}")
+        print(f"  -> Consulta válida: {is_valid}\n")
+
 
 if __name__ == "__main__":
     main()

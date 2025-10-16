@@ -14,18 +14,14 @@ class RelationalAlgebraConverter:
             r"INNER\s+JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+INNER\s+JOIN|$)",
             re.IGNORECASE | re.DOTALL
         )
-        
-        # --- LINHA CORRIGIDA ---
-        # Adicionado (?!INNER\b) para garantir que a palavra-chave 'INNER' não seja capturada como um alias.
+
         base_table_match = re.match(r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!INNER\b)\w+))?", from_str, re.IGNORECASE)
-        # --- FIM DA CORREÇÃO ---
 
         if not base_table_match:
             return None, []
             
         base_table_info = base_table_match.groupdict()
-        
-        # O restante da string, após a tabela base, contém as junções
+
         remaining_from_clause = from_str[base_table_match.end():]
         joins = [m.groupdict() for m in join_pattern.finditer(remaining_from_clause)]
         
