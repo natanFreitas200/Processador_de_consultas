@@ -54,10 +54,7 @@ db_config = {
 DB_SCHEMA = get_db_schema(db_config)
 if DB_SCHEMA:
     print("Database schema retrieved successfully.")
-    for table, columns in DB_SCHEMA.items():
-        print(f"Table: {table}")
-        for col_name, col_type in columns:
-            print(f"  - {col_name}: {col_type}")
+    
 else:
     print("Failed to retrieve database schema.")
     print(f"Configuração de conexão: {db_config}")
