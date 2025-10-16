@@ -6,62 +6,37 @@ def main():
 
     
     test_queries = [
-        "SELECT * FROM cliente;",
-        "SELECT Nome, Email FROM cliente;",
-        "SELECT * FROM produto;",
-        "SELECT Nome, Preco FROM produto;",
+    # Categoria 1: Repetição Direta de Palavras-Chave
+    # Objetivo: Verificar se o parser rejeita a duplicação de cláusulas estruturais.
+    'SELECT SELECT Nome, Email FROM cliente;',        # "SELECT" duplicado
+    'SELECT * FROM FROM cliente;',                    # "FROM" duplicado
+    'SELECT * FROM cliente WHERE WHERE Nome = "A";',    # "WHERE" duplicado
+    'SELECT * FROM cliente INNER JOIN INNER JOIN produto ON cliente.id = produto.id;', # "INNER JOIN" duplicado
+    'SELECT * FROM cliente INNER JOIN produto ON ON cliente.id = produto.id;',       # "ON" duplicado
 
-        "SELECT Nome, Preco FROM produto WHERE Preco > 50;",
-        "SELECT Nome, QuantEstoque FROM produto WHERE QuantEstoque < 100;",
-        "SELECT * FROM pedido WHERE Status_idStatus = 1;",
+    # Categoria 2: Palavras-Chave Usadas como Nomes (Identificadores)
+    # Objetivo: Garantir que o parser não confunda uma palavra-chave com um nome de coluna ou tabela.
+    'SELECT Nome, FROM, Email FROM cliente;',        # "FROM" como se fosse uma coluna
+    'SELECT WHERE FROM cliente;',                    # "WHERE" como se fosse uma coluna
+    'SELECT * FROM SELECT;',                         # "SELECT" como se fosse uma tabela
+    'SELECT * FROM cliente INNER JOIN WHERE ON cliente.id = WHERE.id;', # "WHERE" como se fosse uma tabela de join
+    'SELECT * FROM cliente WHERE Nome = SELECT;',      # "SELECT" como se fosse um valor na cláusula WHERE
 
-        "SELECT produto.Nome, categoria.Descricao FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria;",
-        "SELECT pedido.idPedido, cliente.Nome FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente;",
-        "SELECT produto.Nome, pedido_has_produto.Quantidade FROM pedido_has_produto INNER JOIN produto ON pedido_has_produto.Produto_idProduto = produto.idProduto;",
+    # Categoria 3: Ordem e Estrutura Completamente Quebradas
+    # Objetivo: Testar a rigidez da regex principal contra uma ordem ilógica de palavras-chave.
+    'SELECT FROM WHERE;',                            # Cláusulas sem conteúdo entre elas
+    'FROM cliente SELECT *;',                        # Ordem das cláusulas invertida
+    'SELECT * cliente FROM;',                        # Ordem de tabela e FROM invertida
+    'SELECT Nome FROM cliente ON idCliente = 1;',    # Cláusula ON sem um INNER JOIN
+    'SELECT * FROM cliente WHERE INNER JOIN produto ON cliente.id = produto.id;', # Cláusula JOIN dentro da WHERE
 
-        "SELECT produto.Nome, produto.Preco FROM produto INNER JOIN categoria ON produto.Categoria_idCategoria = categoria.idCategoria WHERE categoria.Descricao = 'Eletrônicos';",
-        "SELECT pedido.idPedido, pedido.ValorTotalPedido FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente WHERE cliente.Nome = 'João Silva';",
-
-        "SELECT cliente.Nome, produto.Nome, pedido.DataPedido FROM pedido INNER JOIN cliente ON pedido.Cliente_idCliente = cliente.idCliente INNER JOIN pedido_has_produto ON pedido.idPedido = pedido_has_produto.Pedido_idPedido INNER JOIN produto ON pedido_has_produto.Produto_idProduto = produto.idProduto;",
-
-        "SELECT c.Nome, p.ValorTotalPedido FROM cliente AS c INNER JOIN pedido AS p ON c.idCliente = p.Cliente_idCliente;",
-        "SELECT prod.Nome FROM produto prod WHERE prod.Preco > 100;",
-
-        "SELECT * FROM produto WHERE (Preco > 100 AND QuantEstoque < 50) OR (Preco < 20);",
-
-        "SELECT Categoria_idCategoria, COUNT(*) FROM produto GROUP BY Categoria_idCategoria;",
-        "SELECT Categoria_idCategoria, AVG(Preco) FROM produto GROUP BY Categoria_idCategoria HAVING AVG(Preco) > 200;",
-
-        "SELECT Nome FROM produto WHERE Categoria_idCategoria IN (SELECT idCategoria FROM categoria WHERE Descricao = 'Importados');",
-        "SELECT * FROM pedido WHERE Cliente_idCliente = (SELECT idCliente FROM cliente WHERE Nome = 'Maria Souza');",
-
-        "SELECT Nome, Preco FROM produto ORDER BY Preco DESC;",
-        "SELECT * FROM cliente ORDER BY Nome ASC LIMIT 10;",
-
-        "SELECT Nome, Email, FROM cliente;",
-        "SELECT Nome FROM produto WHERE Preco > 50 AND;",
-
-        "SELECT c.Nome FROM cliente AS c WHERE cliente.Nome = 'José';",
-
-        "SELECT * FROM produto INNER JOIN categoria;",
-
-        "SELECT Nome, COUNT(*) FROM produto GROUP BY Categoria_idCategoria;",
-
-        "SELECT * FROM produto HAVING AVG(Preco) > 100;",
-
-        "SELECT * FROM produto WHERE Preco =< 100;",
-
-        "SELECT Nome, -- Comentário ignorado\n Preco FROM produto;",
-
-        "SELECT Nome FROM cliente UNION SELECT Nome FROM produto;",
-
-        "SELECT id FROM cliente INNER JOIN pedido ON cliente.idCliente = pedido.Cliente_idCliente;",
-
-        "SELECT cliente.Nome, pedido.idPedido FROM cliente, pedido WHERE cliente.idCliente = pedido.Cliente_idCliente;",
-
-        "SELECT Preco * 2 AS PrecoDobrado FROM produto WHERE PrecoDobrado > 100;",
-        "SELECT * FROM produto WHERE COUNT(*) > 10;",
-    ]
+    # Categoria 4: Operadores e Estruturas Malformadas
+    # Objetivo: Testar a validação de tokens e a lógica interna das cláusulas.
+    'SELECT * FROM cliente WHERE Nome >> "A";',       # Operador totalmente inválido
+    'SELECT * FROM cliente WHERE Preco > > 50;',     # Operador duplicado
+    'SELECT Nome, (Email) FROM cliente;',            # Parênteses em volta de uma coluna (seu parser pode ou não aceitar)
+    'SELECT * FROM cliente WHERE Nome = "A" AND OR Email = "B";', # Operadores lógicos conflitantes
+]
 
     # Itera sobre cada consulta da lista de testes
     for query in test_queries:
