@@ -112,10 +112,7 @@ class QueryProcessor:
         return True, "Colunas SELECT válidas."
 
     def _validate_where_on_clause(self, clause_str, tables_in_query, clause_name):
-        """
-        Valida colunas e operadores em uma cláusula WHERE ou ON.
-        Garante que apenas tokens permitidos sejam usados.
-        """
+ 
         cleaned_clause = re.sub(r"'[^']*'", ' literal_string ', clause_str)
         cleaned_clause = re.sub(r'"[^"]*"', ' literal_string ', cleaned_clause)
 
