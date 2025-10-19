@@ -275,98 +275,11 @@ class RelationalAlgebraConverter:
 
 if __name__ == "__main__":
     converter = RelationalAlgebraConverter()
-
-    print("=" * 60)
-    print("EXEMPLO 1: Consulta simples com SELECT e WHERE")
-    print("=" * 60)
-    sql1 = "SELECT nome, idade FROM funcionarios WHERE salario > 5000"
-    print("SQL:", sql1)
-    print("Álgebra Relacional:", converter.convert(sql1))
-    converter.generate_image_graph(sql1, 'exemplo1_simples.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 2: Consulta com INNER JOIN")
-    print("=" * 60)
-    sql2 = ("SELECT f.nome, d.nome_departamento "
-            "FROM funcionarios f "
-            "INNER JOIN departamentos d ON f.dept_id = d.id")
-    print("SQL:", sql2)
-    print("Álgebra Relacional:", converter.convert(sql2))
-    converter.generate_image_graph(sql2, 'exemplo2_join.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 3: Consulta com múltiplos JOINs")
-    print("=" * 60)
-    sql3 = ("SELECT c.Nome, p.Nome, ped.DataPedido "
-            "FROM cliente AS c "
-            "INNER JOIN pedido ped ON c.idCliente = ped.Cliente_idCliente "
-            "INNER JOIN produto p ON ped.idProduto = p.idProduto "
-            "WHERE ped.ValorTotal > 100")
-    print("SQL:", sql3)
-    print("Álgebra Relacional:", converter.convert(sql3))
-    converter.generate_image_graph(sql3, 'exemplo3_multiplos_joins.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 4: Consulta com WHERE complexo")
-    print("=" * 60)
-    sql4 = ("SELECT e.nome, e.cargo, e.salario "
-            "FROM empregados AS e "
-            "WHERE e.salario > 3000 AND e.cargo = 'Analista'")
-    print("SQL:", sql4)
-    print("Álgebra Relacional:", converter.convert(sql4))
-    converter.generate_image_graph(sql4, 'exemplo4_where_complexo.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 5: Consulta com alias nas tabelas")
-    print("=" * 60)
-    sql5 = ("SELECT u.email, p.titulo "
-            "FROM usuarios AS u "
-            "INNER JOIN posts AS p ON u.id = p.user_id "
-            "WHERE p.status = 'publicado'")
-    print("SQL:", sql5)
-    print("Álgebra Relacional:", converter.convert(sql5))
-    converter.generate_image_graph(sql5, 'exemplo5_alias.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 6: Consulta apenas com SELECT")
-    print("=" * 60)
-    sql6 = "SELECT nome, telefone, email FROM clientes"
-    print("SQL:", sql6)
-    print("Álgebra Relacional:", converter.convert(sql6))
-    converter.generate_image_graph(sql6, 'exemplo6_apenas_select.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 7: Consulta acadêmica - Estudantes, Cursos e Matrículas")
-    print("=" * 60)
-    sql7 = ("SELECT est.nome, cur.nome_curso, mat.data_matricula "
-            "FROM estudantes est "
-            "INNER JOIN matriculas mat ON est.id = mat.estudante_id "
-            "INNER JOIN cursos cur ON mat.curso_id = cur.id "
-            "WHERE cur.ativo = 1")
-    print("SQL:", sql7)
-    print("Álgebra Relacional:", converter.convert(sql7))
-    converter.generate_image_graph(sql7, 'exemplo7_academico.png')
-
-    print("\n" + "=" * 60)
-    print("EXEMPLO 8: Sistema de vendas")
-    print("=" * 60)
-    sql8 = ("SELECT v.data_venda, prod.nome, v.quantidade "
-            "FROM vendas v "
-            "INNER JOIN produtos prod ON v.produto_id = prod.id "
-            "WHERE v.valor_total > 500")
-    print("SQL:", sql8)
-    print("Álgebra Relacional:", converter.convert(sql8))
-    converter.generate_image_graph(sql8, 'exemplo8_vendas.png')
-
-    print("\n" + "=" * 60)
-    print("TODOS OS EXEMPLOS FORAM PROCESSADOS!")
-    print("Arquivos PNG gerados:")
-    print("- exemplo1_simples.png")
-    print("- exemplo2_join.png") 
-    print("- exemplo3_multiplos_joins.png")
-    print("- exemplo4_where_complexo.png")
-    print("- exemplo5_alias.png")
-    print("- exemplo6_apenas_select.png")
-    print("- exemplo7_academico.png")
-    print("- exemplo8_vendas.png")
-    print("=" * 60)
+    
+    # Exemplo simples
+    sql_exemplo = "SELECT Nome, Email FROM Cliente WHERE Nome = 'João'"
+    print(f"SQL: {sql_exemplo}")
+    print(f"Álgebra Relacional: {converter.convert(sql_exemplo)}")
+    
+    # Gerar imagem de exemplo (opcional)
+    # converter.generate_image_graph(sql_exemplo, 'exemplo.png')
