@@ -1,9 +1,6 @@
 import re
-import os
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import networkx as nx
-from matplotlib.patches import FancyBboxPatch
+import numpy as np
 
 class RelationalAlgebraConverter:
 
@@ -63,88 +60,54 @@ class RelationalAlgebraConverter:
         if select_cols: tree = ('π', select_cols, tree)
         return tree
 
-    def generate_image_graph(self, sql_query, output_filename='grafo_relacional.png'):
-        print(f"\nConvertendo SQL para imagem: '{sql_query}'")
-        relational_tree = self.convert_to_tree(sql_query)
+    def _calculate_improved_positions(self, G, root_id):
+        pos = {}
+        levels = {}
+        
+        queue = [(root_id, 0)]
+        visited = set()
+        
+        while queue:
+            node, level = queue.pop(0)
+            if node in visited:
+                continue
+                
+            visited.add(node)
+            levels[node] = level
+            
+            for child in G.successors(node):
+                queue.append((child, level + 1))
+        
+        level_nodes = {}
+        for node, level in levels.items():
+            if level not in level_nodes:
+                level_nodes[level] = []
+            level_nodes[level].append(node)
+        
+        max_level = max(levels.values()) if levels else 0
+        
+        for level, nodes in level_nodes.items():
+            y = max_level - level
+            
+            if len(nodes) == 1:
+                x_positions = [0]
+            else:
+                width = max(4, len(nodes) * 2)
+                x_positions = np.linspace(-width/2, width/2, len(nodes))
+            
+            for i, node in enumerate(nodes):
+                pos[node] = (x_positions[i], y * 2)
+        
+        return pos
 
-        if isinstance(relational_tree, str) and relational_tree.startswith("Erro"):
-            print(relational_tree)
-            return
-
-        G = nx.DiGraph()
-        self.node_counter = 0
-        pos_dict = {}
-        node_colors = {}
-        node_labels = {}
-        
-        root_id = self._add_nodes_to_graph(relational_tree, G, pos_dict, node_colors, node_labels)
-        
-        pos = self._calculate_hierarchical_positions(G, root_id)
-        
-        plt.figure(figsize=(14, 10))
-        plt.clf()
-        
-        color_map = {
-            'projection': '#f3e5f5',
-            'selection': '#e8f5e8', 
-            'join': '#ffebee',
-            'rename': '#fff3e0',
-            'table': '#e1f5fe'
-        }
-        
-        for node_type, color in color_map.items():
-            nodes_of_type = [node for node, attr in node_colors.items() if attr == node_type]
-            if nodes_of_type:
-                nx.draw_networkx_nodes(G, pos, nodelist=nodes_of_type, 
-                                     node_color=color, node_size=3000,
-                                     edgecolors='black', linewidths=2)
-        
-        nx.draw_networkx_edges(G, pos, edge_color='#333333', arrows=True, 
-                              arrowsize=20, arrowstyle='->', width=2)
-        
-        for node, (x, y) in pos.items():
-            label = node_labels[node]
-            plt.text(x, y, label, ha='center', va='center', fontsize=9,
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8),
-                    wrap=True)
-        
-        plt.title(f'Álgebra Relacional\nConsulta: {sql_query}', 
-                 fontsize=14, fontweight='bold', pad=20)
-        
-        legend_elements = [
-            mpatches.Patch(color='#f3e5f5', label='π - Projeção (SELECT)'),
-            mpatches.Patch(color='#e8f5e8', label='σ - Seleção (WHERE)'),
-            mpatches.Patch(color='#ffebee', label='JOIN - Junção (JOIN)'),
-            mpatches.Patch(color='#fff3e0', label='ρ - Renomeação (AS)'),
-            mpatches.Patch(color='#e1f5fe', label='Tabela')
-        ]
-        
-        plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
-        
-        plt.axis('off')
-        
-        plt.tight_layout()
-        
-        plt.savefig(output_filename, dpi=300, bbox_inches='tight', 
-                   facecolor='white', edgecolor='none')
-        
-        full_path = os.path.abspath(output_filename)
-        print(f"Grafo em imagem gerado com sucesso! Arquivo salvo como: {full_path}")
-        
-        try:
-            os.startfile(full_path)
-        except OSError:
-            print("Imagem salva! Abra manualmente o arquivo para visualizar.")
-        
-        plt.close()
-    
-    def _add_nodes_to_graph(self, tree_node, G, pos_dict, node_colors, node_labels, level=0):
+    def _add_nodes_to_graph(self, tree_node, G, pos_dict, node_colors, node_labels, node_shapes, level=0):
         current_id = self._get_unique_id()
         
         if isinstance(tree_node, str):
             G.add_node(current_id)
             node_colors[current_id] = 'table'
             node_labels[current_id] = tree_node
+            node_shapes[current_id] = 'rect'
             pos_dict[current_id] = level
             return current_id
 
@@ -154,33 +117,37 @@ class RelationalAlgebraConverter:
             G.add_node(current_id)
             node_colors[current_id] = 'projection'
             node_labels[current_id] = f'π\n{tree_node[1]}'
+            node_shapes[current_id] = 'circle'
             pos_dict[current_id] = level
-            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, node_shapes, level + 1)
             G.add_edge(current_id, child_id)
         
         elif operator == 'σ':
             G.add_node(current_id)
             node_colors[current_id] = 'selection'
             node_labels[current_id] = f'σ\n{tree_node[1]}'
+            node_shapes[current_id] = 'rect'
             pos_dict[current_id] = level
-            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, node_shapes, level + 1)
             G.add_edge(current_id, child_id)
             
         elif operator == 'ρ':
             G.add_node(current_id)
             node_colors[current_id] = 'rename'
             node_labels[current_id] = f'ρ\nalias: {tree_node[1]}'
+            node_shapes[current_id] = 'rect'
             pos_dict[current_id] = level
-            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, node_shapes, level + 1)
             G.add_edge(current_id, child_id)
 
         elif operator == '⨝':
             G.add_node(current_id)
             node_colors[current_id] = 'join'
             node_labels[current_id] = f'JOIN\n{tree_node[1]}'
+            node_shapes[current_id] = 'diamond'
             pos_dict[current_id] = level
-            left_child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
-            right_child_id = self._add_nodes_to_graph(tree_node[3], G, pos_dict, node_colors, node_labels, level + 1)
+            left_child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, node_shapes, level + 1)
+            right_child_id = self._add_nodes_to_graph(tree_node[3], G, pos_dict, node_colors, node_labels, node_shapes, level + 1)
             G.add_edge(current_id, left_child_id)
             G.add_edge(current_id, right_child_id)
 
@@ -224,22 +191,11 @@ class RelationalAlgebraConverter:
         return pos
     
     def convert(self, sql_query):
-        
         print(f"\nConvertendo SQL para String: '{sql_query}'")
         parsed_parts = self._parse_sql(sql_query)
 
         if not parsed_parts:
             return "Erro: A sintaxe da consulta SQL é inválida ou não é suportada pelo conversor."
-
-        select_cols = parsed_parts.get('columns')
-        from_clause = parsed_parts.get('from_clause')
-        where_clause = parsed_parts.get('where')
-
-        base_table_info, joins = self._parse_from_clause(from_clause)
-
-        if not base_table_info:
-            return "Erro: Não foi possível identificar a tabela base na cláusula FROM."
-
 
         select_cols = parsed_parts.get('columns')
         from_clause = parsed_parts.get('from_clause')
@@ -272,14 +228,26 @@ class RelationalAlgebraConverter:
 
         return relational_expr
 
+    def validate_sql_syntax(self, sql_query):
+        try:
+            parsed_parts = self._parse_sql(sql_query)
+            if not parsed_parts:
+                return False, "Sintaxe SQL inválida"
+            
+            from_clause = parsed_parts.get('from_clause')
+            base_table_info, joins = self._parse_from_clause(from_clause)
+            
+            if not base_table_info:
+                return False, "Tabela base não identificada na cláusula FROM"
+            
+            return True, "Consulta SQL válida"
+        except Exception as e:
+            return False, f"Erro de validação: {str(e)}"
+
 
 if __name__ == "__main__":
     converter = RelationalAlgebraConverter()
     
-    # Exemplo simples
     sql_exemplo = "SELECT Nome, Email FROM Cliente WHERE Nome = 'João'"
     print(f"SQL: {sql_exemplo}")
     print(f"Álgebra Relacional: {converter.convert(sql_exemplo)}")
-    
-    # Gerar imagem de exemplo (opcional)
-    # converter.generate_image_graph(sql_exemplo, 'exemplo.png')

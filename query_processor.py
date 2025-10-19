@@ -9,10 +9,7 @@ class QueryProcessor:
         }
 
     def _parse_query(self, query):
-        """
-        Analisa a consulta usando uma expressão regular estrita que corresponde
-        apenas às cláusulas e à estrutura permitidas.
-        """
+
         query = query.strip().rstrip(';')
 
         pattern = re.compile(
@@ -71,7 +68,7 @@ class QueryProcessor:
         return True
 
     def _check_single_column(self, col_identifier, tables_in_query):
-        """Verifica se um único identificador de coluna é válido e não ambíguo."""
+
         if '.' in col_identifier:
             table_name, column_name = col_identifier.split('.', 1)
             if table_name not in tables_in_query:
@@ -96,7 +93,7 @@ class QueryProcessor:
         return True, "Coluna válida."
 
     def _validate_select_columns(self, columns_str, tables):
-        """Valida as colunas na cláusula SELECT."""
+
         column_list = [col.strip() for col in columns_str.split(',')]
         
         for col_ident in column_list:

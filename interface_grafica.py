@@ -3,6 +3,16 @@ from tkinter import ttk, scrolledtext, messagebox
 from tkinter import filedialog
 import threading
 import os
+import sys
+import re
+
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+plt.ioff()
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.patches as patches
+import networkx as nx
 
 from query_processor import QueryProcessor
 from conversor import RelationalAlgebraConverter
@@ -15,7 +25,6 @@ class ProcessadorConsultasGUI:
         self.root.geometry("1200x800")
         self.root.configure(bg='#f0f0f0')
         
-        # Inicializar processadores
         try:
             self.query_processor = QueryProcessor()
         except Exception as e:
@@ -27,38 +36,30 @@ class ProcessadorConsultasGUI:
         self.setup_interface()
         
     def setup_interface(self):
-        # Frame principal
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Configurar grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(2, weight=1)
-        
-        # Título
         title_label = ttk.Label(main_frame, text="Processador de Consultas SQL", 
                                font=('Arial', 16, 'bold'))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
-        # Frame de entrada
         input_frame = ttk.LabelFrame(main_frame, text="Entrada da Consulta SQL", padding="10")
         input_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         input_frame.columnconfigure(0, weight=1)
         
-        # Campo de entrada SQL
         ttk.Label(input_frame, text="Digite sua consulta SQL:").grid(row=0, column=0, sticky=tk.W)
         
         self.sql_entry = scrolledtext.ScrolledText(input_frame, height=4, width=70, 
                                                   wrap=tk.WORD, font=('Courier New', 10))
         self.sql_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 10))
         
-        # Frame de botões
         button_frame = ttk.Frame(input_frame)
         button_frame.grid(row=2, column=0, pady=(0, 5))
         
-        # Botões
         ttk.Button(button_frame, text="Validar Consulta", 
                   command=self.validar_consulta).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="Processar Consulta", 
@@ -66,27 +67,20 @@ class ProcessadorConsultasGUI:
         ttk.Button(button_frame, text="Limpar", 
                   command=self.limpar_campos).pack(side=tk.LEFT, padx=(0, 5))
         
-        # Notebook para abas
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         
-        # Aba 1: Resultados de Validação
         self.setup_validation_tab()
         
-        # Aba 2: Álgebra Relacional
         self.setup_algebra_tab()
         
-        # Aba 3: Grafo Visual
         self.setup_graph_tab()
         
-        # Aba 4: Plano de Execução
         self.setup_execution_tab()
         
-        # Consultas de exemplo
         self.add_example_queries()
         
     def setup_validation_tab(self):
-        # Frame de validação
         validation_frame = ttk.Frame(self.notebook)
         self.notebook.add(validation_frame, text="Validação SQL")
         
@@ -102,7 +96,6 @@ class ProcessadorConsultasGUI:
                                  padx=10, pady=(0, 10))
         
     def setup_algebra_tab(self):
-        # Frame de álgebra relacional
         algebra_frame = ttk.Frame(self.notebook)
         self.notebook.add(algebra_frame, text="Álgebra Relacional")
         
@@ -118,34 +111,40 @@ class ProcessadorConsultasGUI:
                               padx=10, pady=(0, 10))
         
     def setup_graph_tab(self):
-        # Frame do grafo
         graph_frame = ttk.Frame(self.notebook)
-        self.notebook.add(graph_frame, text="Grafo de Operadores")
+        self.notebook.add(graph_frame, text="Grafo Visual")
         
         graph_frame.columnconfigure(0, weight=1)
         graph_frame.rowconfigure(1, weight=1)
         
-        # Frame superior com botões
         graph_controls = ttk.Frame(graph_frame)
         graph_controls.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
-        ttk.Label(graph_controls, text="Grafo de Operadores (Não Otimizado):", 
+        ttk.Label(graph_controls, text="Visualização do Grafo de Álgebra Relacional:", 
                  font=('Arial', 12, 'bold')).pack(side=tk.LEFT)
         
-        ttk.Button(graph_controls, text="Gerar Imagem PNG", 
-                  command=self.gerar_imagem_grafo).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(graph_controls, text="Atualizar Grafo", 
+                  command=self.atualizar_grafo_visual).pack(side=tk.RIGHT, padx=(5, 0))
         
-        ttk.Button(graph_controls, text="Abrir Pasta", 
-                  command=self.abrir_pasta_imagens).pack(side=tk.RIGHT)
+        canvas_frame = ttk.Frame(graph_frame)
+        canvas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10)
+        canvas_frame.columnconfigure(0, weight=1)
+        canvas_frame.rowconfigure(0, weight=1)
         
-        # Área de texto para mostrar a representação textual do grafo
-        self.graph_text = scrolledtext.ScrolledText(graph_frame, height=20, 
-                                                   font=('Courier New', 10))
-        self.graph_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
-                            padx=10, pady=(0, 10))
+        self.graph_fig = plt.Figure(figsize=(10, 8))
+        self.graph_ax = self.graph_fig.add_subplot(111)
+        self.graph_ax.set_facecolor('#f8f9fa')
+        self.graph_ax.axis('off')
+        
+        self.graph_canvas = FigureCanvasTkAgg(self.graph_fig, master=canvas_frame)
+        self.graph_canvas.get_tk_widget().grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.graph_ax.text(0.5, 0.5, 'Digite uma consulta SQL e clique em "Processar Consulta"\npara visualizar o grafo de álgebra relacional',
+                          ha='center', va='center', transform=self.graph_ax.transAxes,
+                          fontsize=14, style='italic', color='gray')
+        self.graph_canvas.draw()
         
     def setup_execution_tab(self):
-        # Frame do plano de execução
         execution_frame = ttk.Frame(self.notebook)
         self.notebook.add(execution_frame, text="Plano de Execução")
         
@@ -161,15 +160,7 @@ class ProcessadorConsultasGUI:
                                 padx=10, pady=(0, 10))
         
     def add_example_queries(self):
-        # Adicionar alguns exemplos no campo SQL
-        example_sql = """SELECT c.Nome, p.Nome, cat.Descricao
-FROM Cliente c
-INNER JOIN Pedido ped ON c.idCliente = ped.Cliente_idCliente
-INNER JOIN Pedido_has_Produto pp ON ped.idPedido = pp.Pedido_idPedido
-INNER JOIN Produto p ON pp.Produto_idProduto = p.idProduto
-INNER JOIN Categoria cat ON p.Categoria_idCategoria = cat.idCategoria
-WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
-        
+        example_sql = "SELECT Nome, Email FROM cliente;"
         self.sql_entry.insert(tk.END, example_sql)
         
     def validar_consulta(self):
@@ -189,7 +180,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
                 self.validation_text.insert(tk.END, f"Consulta SQL: {sql_query}\n\n")
                 self.validation_text.insert(tk.END, "=== VALIDAÇÃO BÁSICA (SEM BANCO) ===\n")
                 
-                # Validação básica de sintaxe
                 if self._basic_syntax_check(sql_query):
                     self.validation_text.insert(tk.END, "✅ Sintaxe básica parece válida.\n")
                     self.validation_text.insert(tk.END, "⚠️ Nota: Validação completa requer conexão com banco de dados.\n")
@@ -197,7 +187,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
                     self.validation_text.insert(tk.END, "❌ Problema de sintaxe detectado.\n")
                 return
             
-            # Capturar output da validação
             import sys
             from io import StringIO
             
@@ -224,18 +213,14 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             self.validation_text.insert(tk.END, f"Erro durante a validação: {str(e)}")
     
     def _basic_syntax_check(self, sql_query):
-        """Validação básica de sintaxe SQL"""
         sql_upper = sql_query.upper().strip()
         
-        # Verificar se começa com SELECT
         if not sql_upper.startswith("SELECT"):
             return False
             
-        # Verificar se tem FROM
         if "FROM" not in sql_upper:
             return False
             
-        # Verificar estrutura básica com regex
         import re
         pattern = r"^\s*SELECT\s+.+\s+FROM\s+\w+.*$"
         return bool(re.match(pattern, sql_query, re.IGNORECASE | re.DOTALL))
@@ -247,12 +232,10 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             messagebox.showwarning("Aviso", "Por favor, digite uma consulta SQL.")
             return
             
-        # Executar processamento em thread separada para não travar a GUI
         threading.Thread(target=self._processar_consulta_thread, args=(sql_query,), daemon=True).start()
         
     def _processar_consulta_thread(self, sql_query):
         try:
-            # 1. Converter para álgebra relacional
             self.root.after(0, lambda: self.algebra_text.delete("1.0", tk.END))
             self.root.after(0, lambda: self.algebra_text.insert(tk.END, "Processando consulta...\n"))
             
@@ -263,17 +246,12 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             self.root.after(0, lambda: self.algebra_text.insert(tk.END, "=== ÁLGEBRA RELACIONAL (NÃO OTIMIZADA) ===\n"))
             self.root.after(0, lambda: self.algebra_text.insert(tk.END, f"{algebra_expression}\n\n"))
             
-            # 2. Gerar representação textual do grafo
-            tree_representation = self._generate_tree_text(sql_query)
-            self.root.after(0, lambda: self.graph_text.delete("1.0", tk.END))
-            self.root.after(0, lambda: self.graph_text.insert(tk.END, tree_representation))
+            self.root.after(0, self.atualizar_grafo_visual)
             
-            # 4. Gerar plano de execução
             execution_plan = self._generate_execution_plan(sql_query)
             self.root.after(0, lambda: self.execution_text.delete("1.0", tk.END))
             self.root.after(0, lambda: self.execution_text.insert(tk.END, execution_plan))
             
-            # 5. Mudar para a aba do grafo
             self.root.after(0, lambda: self.notebook.select(2))
             
         except Exception as e:
@@ -281,7 +259,7 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
             
     def _generate_tree_text(self, sql_query):
-        """Gera uma representação textual da árvore de álgebra relacional"""
+
         try:
             tree = self.converter.convert_to_tree(sql_query)
             if isinstance(tree, str) and tree.startswith("Erro"):
@@ -311,7 +289,7 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             return f"Erro ao gerar representação textual: {str(e)}"
     
     def _tree_to_text(self, tree, level):
-        """Converte árvore em representação textual indentada"""
+
         indent = "  " * level
         
         if isinstance(tree, str):
@@ -347,12 +325,11 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
         return result
                                    
     def _generate_execution_plan(self, sql_query):
-        """Gera um plano de execução baseado na consulta"""
+
         try:
             plan = f"PLANO DE EXECUÇÃO PARA: {sql_query}\n"
             plan += "=" * 60 + "\n\n"
             
-            # Parse da consulta para extrair componentes
             parsed = self.converter._parse_sql(sql_query)
             if not parsed:
                 return "Erro: Não foi possível gerar o plano de execução."
@@ -360,7 +337,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
             step = 1
             plan += "ETAPAS DE EXECUÇÃO (Ordem Bottom-Up):\n\n"
             
-            # Identificar tabelas
             from_clause = parsed.get('from_clause', '')
             base_table_info, joins = self.converter._parse_from_clause(from_clause)
             
@@ -370,7 +346,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
                 plan += f"   → Resultado: Todas as tuplas de {base_table_info.get('table')}\n\n"
                 step += 1
             
-            # JOINs
             for join in joins:
                 join_table = join.get('join_table')
                 join_condition = join.get('join_on')
@@ -385,7 +360,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
                 plan += f"   → Resultado: Tuplas que satisfazem a condição de join\n\n"
                 step += 1
             
-            # WHERE clause
             where_clause = parsed.get('where')
             if where_clause:
                 plan += f"{step}. SELEÇÃO (σ) - Filtro WHERE\n"
@@ -394,7 +368,6 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
                 plan += f"   → Resultado: Tuplas que satisfazem WHERE\n\n"
                 step += 1
             
-            # SELECT clause
             columns = parsed.get('columns', '*')
             if columns and columns.strip() != '*':
                 plan += f"{step}. PROJEÇÃO (π) - Seleção de colunas\n"
@@ -423,40 +396,253 @@ WHERE p.Preco > 50 AND cat.Descricao = 'Eletrônicos'"""
         except Exception as e:
             return f"Erro ao gerar plano de execução: {str(e)}"
     
-    def gerar_imagem_grafo(self):
-        """Gera uma imagem PNG do grafo usando o conversor"""
+    def atualizar_grafo_visual(self):
+
+        sql_query = self.sql_entry.get("1.0", tk.END).strip()
+        
+        if not sql_query:
+            messagebox.showwarning("Aviso", "Por favor, digite uma consulta SQL primeiro.")
+            return
+        
         try:
-            sql_query = self.sql_entry.get("1.0", tk.END).strip()
+            self.graph_ax.clear()
+            self.graph_ax.set_facecolor('#f8f9fa')
+            self.graph_ax.axis('off')
             
-            if not sql_query:
-                messagebox.showwarning("Aviso", "Por favor, digite uma consulta SQL primeiro.")
+            relational_tree = self.converter.convert_to_tree(sql_query)
+            
+            if isinstance(relational_tree, str) and relational_tree.startswith("Erro"):
+                self.graph_ax.text(0.5, 0.5, f'Erro ao processar consulta:\n{relational_tree}',
+                                  ha='center', va='center', transform=self.graph_ax.transAxes,
+                                  fontsize=12, color='red')
+                self.graph_canvas.draw()
                 return
             
-            # Gerar imagem
-            timestamp = str(int(threading.current_thread().ident))
-            filename = f"grafo_consulta_{timestamp}.png"
+            G = nx.DiGraph()
+            self.converter.node_counter = 0
+            pos_dict = {}
+            node_colors = {}
+            node_labels = {}
+            node_shapes = {}
             
-            self.converter.generate_image_graph(sql_query, filename)
+            root_id = self.converter._add_nodes_to_graph(relational_tree, G, pos_dict, 
+                                                       node_colors, node_labels, node_shapes)
             
-            messagebox.showinfo("Sucesso", f"Imagem do grafo gerada: {filename}\n\nA imagem foi salva na pasta do projeto.")
+            pos = self.converter._calculate_improved_positions(G, root_id)
+            
+            self._desenhar_grafo_integrado(G, pos, node_colors, node_labels, node_shapes, sql_query)
+            
+            self.graph_canvas.draw()
             
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao gerar imagem: {str(e)}")
+            self.graph_ax.text(0.5, 0.5, f'Erro ao gerar grafo:\n{str(e)}',
+                              ha='center', va='center', transform=self.graph_ax.transAxes,
+                              fontsize=12, color='red')
+            self.graph_canvas.draw()
+            print(f"Erro detalhado: {e}")
     
-    def abrir_pasta_imagens(self):
-        """Abre a pasta atual onde estão as imagens geradas"""
-        try:
-            current_dir = os.getcwd()
-            os.startfile(current_dir)
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao abrir pasta: {str(e)}")
+    def _desenhar_grafo_integrado(self, G, pos, node_colors, node_labels, node_shapes, sql_query):
+
+        color_styles = {
+            'projection': {'color': '#9c27b0', 'shape': 'circle', 'icon': 'π', 'text_color': 'white'},
+            'selection': {'color': '#4caf50', 'shape': 'rect', 'icon': 'σ', 'text_color': 'white'},
+            'join': {'color': '#f44336', 'shape': 'diamond', 'icon': '⋈', 'text_color': 'white'},
+            'rename': {'color': '#ff9800', 'shape': 'rect', 'icon': 'ρ', 'text_color': 'white'},
+            'table': {'color': '#2196f3', 'shape': 'rect', 'icon': '📊', 'text_color': 'white'}
+        }
+        
+        for node in G.nodes():
+            x, y = pos[node]
+            node_type = node_colors[node]
+            style = color_styles[node_type]
+            
+            shadow_offset = 0.05
+            if style['shape'] == 'circle':
+                shadow = patches.Circle((x + shadow_offset, y - shadow_offset), 0.35, 
+                                      facecolor='gray', alpha=0.3, zorder=1)
+                self.graph_ax.add_patch(shadow)
+            elif style['shape'] == 'diamond':
+                diamond_points = [[x + shadow_offset, y + 0.45 - shadow_offset], 
+                                [x + 0.35 + shadow_offset, y - shadow_offset], 
+                                [x + shadow_offset, y - 0.45 - shadow_offset], 
+                                [x - 0.35 + shadow_offset, y - shadow_offset]]
+                shadow = patches.Polygon(diamond_points, facecolor='gray', alpha=0.3, zorder=1)
+                self.graph_ax.add_patch(shadow)
+            else:
+                shadow = patches.FancyBboxPatch((x - 0.45 + shadow_offset, y - 0.3 - shadow_offset), 
+                                              0.9, 0.6, boxstyle="round,pad=0.05",
+                                              facecolor='gray', alpha=0.3, zorder=1)
+                self.graph_ax.add_patch(shadow)
+        
+        for edge in G.edges():
+            start_pos = pos[edge[0]]
+            end_pos = pos[edge[1]]
+            
+            arrow = patches.FancyArrowPatch(start_pos, end_pos,
+                                          connectionstyle="arc3,rad=0.1",
+                                          arrowstyle="->", 
+                                          mutation_scale=25,
+                                          color='#34495e',
+                                          linewidth=3,
+                                          alpha=0.8,
+                                          zorder=2)
+            self.graph_ax.add_patch(arrow)
+            
+            arrow_highlight = patches.FancyArrowPatch(start_pos, end_pos,
+                                                    connectionstyle="arc3,rad=0.1",
+                                                    arrowstyle="->", 
+                                                    mutation_scale=20,
+                                                    color='#5dade2',
+                                                    linewidth=1.5,
+                                                    alpha=0.6,
+                                                    zorder=3)
+            self.graph_ax.add_patch(arrow_highlight)
+        
+        for node in G.nodes():
+            x, y = pos[node]
+            node_type = node_colors[node]
+            label = node_labels[node]
+            style = color_styles[node_type]
+            
+            if style['shape'] == 'circle':
+                circle = patches.Circle((x, y), 0.35, facecolor=style['color'], 
+                                      edgecolor='white', linewidth=3, alpha=0.95, zorder=4)
+                self.graph_ax.add_patch(circle)
+                
+                inner_circle = patches.Circle((x - 0.05, y + 0.05), 0.32, 
+                                            facecolor='white', alpha=0.2, zorder=5)
+                self.graph_ax.add_patch(inner_circle)
+                
+            elif style['shape'] == 'diamond':
+                diamond_points = [[x, y + 0.45], [x + 0.35, y], [x, y - 0.45], [x - 0.35, y]]
+                diamond = patches.Polygon(diamond_points, facecolor=style['color'], 
+                                        edgecolor='white', linewidth=3, alpha=0.95, zorder=4)
+                self.graph_ax.add_patch(diamond)
+                
+                inner_diamond_points = [[x - 0.05, y + 0.4], [x + 0.3, y + 0.05], 
+                                      [x - 0.05, y - 0.4], [x - 0.3, y + 0.05]]
+                inner_diamond = patches.Polygon(inner_diamond_points, facecolor='white', 
+                                              alpha=0.2, zorder=5)
+                self.graph_ax.add_patch(inner_diamond)
+                
+            else:
+                rect = patches.FancyBboxPatch((x - 0.45, y - 0.3), 0.9, 0.6,
+                                            boxstyle="round,pad=0.05",
+                                            facecolor=style['color'],
+                                            edgecolor='white',
+                                            linewidth=3,
+                                            alpha=0.95,
+                                            zorder=4)
+                self.graph_ax.add_patch(rect)
+                
+                inner_rect = patches.FancyBboxPatch((x - 0.4, y - 0.25), 0.8, 0.5,
+                                                  boxstyle="round,pad=0.02",
+                                                  facecolor='white',
+                                                  alpha=0.2,
+                                                  zorder=5)
+                self.graph_ax.add_patch(inner_rect)
+            
+            self.graph_ax.text(x + 0.02, y + 0.08, style['icon'], ha='center', va='center', 
+                              fontsize=16, fontweight='bold', color='black', alpha=0.3, zorder=6)
+            self.graph_ax.text(x, y + 0.1, style['icon'], ha='center', va='center', 
+                              fontsize=16, fontweight='bold', color=style['text_color'], zorder=7)
+            
+            wrapped_label = self._wrap_label(label, 15)
+            self.graph_ax.text(x + 0.02, y - 0.18, wrapped_label, ha='center', va='center', 
+                              fontsize=9, fontweight='bold', color='black', alpha=0.3, zorder=6)
+            self.graph_ax.text(x, y - 0.15, wrapped_label, ha='center', va='center', 
+                              fontsize=9, fontweight='bold', color=style['text_color'], zorder=7)
+        
+        title = f'Grafo de Álgebra Relacional'
+        subtitle = f'{sql_query[:60]}{"..." if len(sql_query) > 60 else ""}'
+        
+        self.graph_ax.text(0.5, 0.97, title, transform=self.graph_ax.transAxes, 
+                          fontsize=16, fontweight='bold', ha='center', va='top',
+                          bbox=dict(boxstyle="round,pad=0.3", facecolor='#ecf0f1', alpha=0.9))
+        
+        self.graph_ax.text(0.5, 0.92, subtitle, transform=self.graph_ax.transAxes, 
+                          fontsize=10, ha='center', va='top', style='italic',
+                          color='#7f8c8d')
+        
+        self._add_compact_legend()
+        
+        if pos:
+            x_coords = [x for x, y in pos.values()]
+            y_coords = [y for x, y in pos.values()]
+            margin = 1.2
+            self.graph_ax.set_xlim(min(x_coords) - margin, max(x_coords) + margin)
+            self.graph_ax.set_ylim(min(y_coords) - margin, max(y_coords) + margin)
+    
+    def _add_compact_legend(self):
+
+        legend_items = [
+            {'icon': 'π', 'color': '#9c27b0', 'text': 'Projeção'},
+            {'icon': 'σ', 'color': '#4caf50', 'text': 'Seleção'},
+            {'icon': '⋈', 'color': '#f44336', 'text': 'Junção'},
+            {'icon': 'ρ', 'color': '#ff9800', 'text': 'Renomeação'},
+            {'icon': '📊', 'color': '#2196f3', 'text': 'Tabela'}
+        ]
+        
+        legend_x = 0.02
+        legend_y = 0.25
+        
+        legend_bg = patches.FancyBboxPatch((legend_x - 0.01, legend_y - len(legend_items) * 0.04 - 0.02), 
+                                         0.18, len(legend_items) * 0.04 + 0.04,
+                                         transform=self.graph_ax.transAxes, 
+                                         boxstyle="round,pad=0.01",
+                                         facecolor='white', 
+                                         edgecolor='#bdc3c7', 
+                                         alpha=0.95,
+                                         zorder=10)
+        self.graph_ax.add_patch(legend_bg)
+        
+        self.graph_ax.text(legend_x + 0.08, legend_y - 0.01, 'Operadores', 
+                          transform=self.graph_ax.transAxes, fontsize=9, 
+                          fontweight='bold', ha='center', zorder=11)
+        
+        for i, item in enumerate(legend_items):
+            y_pos = legend_y - 0.03 - (i + 1) * 0.03
+            
+            self.graph_ax.text(legend_x + 0.02, y_pos, item['icon'], 
+                              transform=self.graph_ax.transAxes, fontsize=10, fontweight='bold',
+                              color=item['color'], ha='center', va='center', zorder=11)
+            
+            self.graph_ax.text(legend_x + 0.04, y_pos, item['text'], 
+                              transform=self.graph_ax.transAxes, fontsize=8, 
+                              ha='left', va='center', zorder=11)
+    
+    def _wrap_label(self, text, width):
+
+        words = text.split()
+        lines = []
+        current_line = []
+        
+        for word in words:
+            if len(' '.join(current_line + [word])) <= width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return '\n'.join(lines[:2])
     
     def limpar_campos(self):
         self.sql_entry.delete("1.0", tk.END)
         self.validation_text.delete("1.0", tk.END)
         self.algebra_text.delete("1.0", tk.END)
         self.execution_text.delete("1.0", tk.END)
-        self.graph_text.delete("1.0", tk.END)
+        
+        self.graph_ax.clear()
+        self.graph_ax.set_facecolor('#f8f9fa')
+        self.graph_ax.axis('off')
+        self.graph_ax.text(0.5, 0.5, 'Digite uma consulta SQL e clique em "Processar Consulta"\npara visualizar o grafo de álgebra relacional',
+                          ha='center', va='center', transform=self.graph_ax.transAxes,
+                          fontsize=14, style='italic', color='gray')
+        self.graph_canvas.draw()
 
 
 def main():

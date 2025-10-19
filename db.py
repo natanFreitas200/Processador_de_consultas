@@ -16,16 +16,17 @@ def get_db_schema(config):
             SELECT TABLE_NAME FROM information_schema.tables
             WHERE table_schema = '{db_name}';
         """
+        
         cursor.execute(query)
-        tables = [table[0] for table in cursor.fetchall()]
-
-        for table_name in tables:
-            query = f"""
+        tables = cursor.fetchall()
+        
+        for table in tables:
+            table_name = table[0]
+            column_query = f"""
                 SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.columns
-                WHERE table_schema = '{db_name}' AND table_name = '{table_name}'
-                ORDER BY ORDINAL_POSITION;
+                WHERE table_schema = '{db_name}' AND table_name = '{table_name}';
             """
-            cursor.execute(query)
+            cursor.execute(column_query)
             columns = cursor.fetchall()
             schema[table_name] = [(col[0], col[1]) for col in columns]
         
