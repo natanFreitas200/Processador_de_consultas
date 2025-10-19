@@ -66,6 +66,8 @@ class ProcessadorConsultasGUI:
                   command=self.processar_consulta).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="Limpar", 
                   command=self.limpar_campos).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Próximo Exemplo", 
+                  command=self.next_example_query).pack(side=tk.LEFT, padx=(0, 5))
         
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
@@ -160,8 +162,23 @@ class ProcessadorConsultasGUI:
                                 padx=10, pady=(0, 10))
         
     def add_example_queries(self):
-        example_sql = "SELECT Nome, Email FROM cliente;"
-        self.sql_entry.insert(tk.END, example_sql)
+        example_queries = [
+            "SELECT Nome, Email FROM cliente;",
+            "SELECT * FROM pedidos WHERE valor > 100;",
+            "SELECT produto, COUNT(*) FROM vendas GROUP BY produto;",
+            "SELECT cliente, SUM(valor) FROM compras WHERE data BETWEEN '2025-01-01' AND '2025-12-31' GROUP BY cliente;",
+            "SELECT a.nome, b.salario FROM funcionarios a JOIN salarios b ON a.id = b.funcionario_id WHERE b.salario > 5000;"
+        ]
+        self.sql_entry.delete("1.0", tk.END)
+        self.sql_entry.insert(tk.END, example_queries[0])
+        self.example_queries = example_queries
+
+    def next_example_query(self):
+        if not hasattr(self, 'example_index'):
+            self.example_index = 0
+        self.example_index = (self.example_index + 1) % len(self.example_queries)
+        self.sql_entry.delete("1.0", tk.END)
+        self.sql_entry.insert(tk.END, self.example_queries[self.example_index])
         
     def validar_consulta(self):
         sql_query = self.sql_entry.get("1.0", tk.END).strip()
@@ -181,10 +198,10 @@ class ProcessadorConsultasGUI:
                 self.validation_text.insert(tk.END, "=== VALIDAÇÃO BÁSICA (SEM BANCO) ===\n")
                 
                 if self._basic_syntax_check(sql_query):
-                    self.validation_text.insert(tk.END, "✅ Sintaxe básica parece válida.\n")
-                    self.validation_text.insert(tk.END, "⚠️ Nota: Validação completa requer conexão com banco de dados.\n")
+                    self.validation_text.insert(tk.END, " Sintaxe básica parece válida.\n")
+                    self.validation_text.insert(tk.END, " Nota: Validação completa requer conexão com banco de dados.\n")
                 else:
-                    self.validation_text.insert(tk.END, "❌ Problema de sintaxe detectado.\n")
+                    self.validation_text.insert(tk.END, " Problema de sintaxe detectado.\n")
                 return
             
             import sys
@@ -293,30 +310,30 @@ class ProcessadorConsultasGUI:
         indent = "  " * level
         
         if isinstance(tree, str):
-            return f"{indent}📋 Tabela: {tree}"
+            return f"{indent}Tabela: {tree}"
         
         operator = tree[0]
         
         if operator == 'π':
-            result = f"{indent}🔽 π (Projeção)\n"
+            result = f"{indent}Projeção\n"
             result += f"{indent}   Colunas: {tree[1]}\n"
             result += f"{indent}   ↓\n"
             result += self._tree_to_text(tree[2], level + 1)
             
         elif operator == 'σ':
-            result = f"{indent}🔍 σ (Seleção)\n"
+            result = f"{indent}Seleção\n"
             result += f"{indent}   Condição: {tree[1]}\n"
             result += f"{indent}   ↓\n"
             result += self._tree_to_text(tree[2], level + 1)
             
         elif operator == 'ρ':
-            result = f"{indent}🏷️ ρ (Renomeação)\n"
+            result = f"{indent}Renomeação\n"
             result += f"{indent}   Alias: {tree[1]}\n"
             result += f"{indent}   ↓\n"
             result += self._tree_to_text(tree[2], level + 1)
             
         elif operator == '⨝':
-            result = f"{indent}🔗 ⨝ (Junção)\n"
+            result = f"{indent}Junção\n"
             result += f"{indent}   Condição: {tree[1]}\n"
             result += f"{indent}   ↙️     ↘️\n"
             result += self._tree_to_text(tree[2], level + 1) + "\n"
@@ -444,11 +461,11 @@ class ProcessadorConsultasGUI:
     def _desenhar_grafo_integrado(self, G, pos, node_colors, node_labels, node_shapes, sql_query):
 
         color_styles = {
-            'projection': {'color': '#9c27b0', 'shape': 'circle', 'icon': 'π', 'text_color': 'white'},
-            'selection': {'color': '#4caf50', 'shape': 'rect', 'icon': 'σ', 'text_color': 'white'},
-            'join': {'color': '#f44336', 'shape': 'diamond', 'icon': '⋈', 'text_color': 'white'},
-            'rename': {'color': '#ff9800', 'shape': 'rect', 'icon': 'ρ', 'text_color': 'white'},
-            'table': {'color': '#2196f3', 'shape': 'rect', 'icon': '📊', 'text_color': 'white'}
+            'projection': {'color': '#9c27b0', 'shape': 'circle', 'icon': 'P', 'text_color': 'white'},
+            'selection': {'color': '#4caf50', 'shape': 'rect', 'icon': 'S', 'text_color': 'white'},
+            'join': {'color': '#f44336', 'shape': 'diamond', 'icon': 'J', 'text_color': 'white'},
+            'rename': {'color': '#ff9800', 'shape': 'rect', 'icon': 'R', 'text_color': 'white'},
+            'table': {'color': '#2196f3', 'shape': 'rect', 'icon': 'T', 'text_color': 'white'}
         }
         
         for node in G.nodes():
@@ -576,11 +593,11 @@ class ProcessadorConsultasGUI:
     def _add_compact_legend(self):
 
         legend_items = [
-            {'icon': 'π', 'color': '#9c27b0', 'text': 'Projeção'},
-            {'icon': 'σ', 'color': '#4caf50', 'text': 'Seleção'},
-            {'icon': '⋈', 'color': '#f44336', 'text': 'Junção'},
-            {'icon': 'ρ', 'color': '#ff9800', 'text': 'Renomeação'},
-            {'icon': '📊', 'color': '#2196f3', 'text': 'Tabela'}
+            {'icon': 'P', 'color': '#9c27b0', 'text': 'Projeção'},
+            {'icon': 'S', 'color': '#4caf50', 'text': 'Seleção'},
+            {'icon': 'J', 'color': '#f44336', 'text': 'Junção'},
+            {'icon': 'R', 'color': '#ff9800', 'text': 'Renomeação'},
+            {'icon': 'T', 'color': '#2196f3', 'text': 'Tabela'}
         ]
         
         legend_x = 0.02
