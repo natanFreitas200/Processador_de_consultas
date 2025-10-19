@@ -1,7 +1,9 @@
 import re
-import uuid
-import webbrowser
 import os
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import networkx as nx
+from matplotlib.patches import FancyBboxPatch
 
 class RelationalAlgebraConverter:
 
@@ -61,227 +63,165 @@ class RelationalAlgebraConverter:
         if select_cols: tree = ('π', select_cols, tree)
         return tree
 
-    def _tree_to_mermaid(self, tree_node, mermaid_lines):
-        current_id = self._get_unique_id()
-        
-        if isinstance(tree_node, str):
-            mermaid_lines.append(f'{current_id}["{tree_node}"]')
-            mermaid_lines.append(f'classDef table fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000')
-            mermaid_lines.append(f'class {current_id} table')
-            return current_id
-
-        operator = tree_node[0]
-        
-        if operator == 'π':
-            label = f'π<br/>{tree_node[1]}'
-            mermaid_lines.append(f'{current_id}["{label}"]')
-            mermaid_lines.append(f'classDef projection fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000')
-            mermaid_lines.append(f'class {current_id} projection')
-            child_id = self._tree_to_mermaid(tree_node[2], mermaid_lines)
-            mermaid_lines.append(f'{current_id} --> {child_id}')
-        
-        elif operator == 'σ':
-            label = f'σ<br/>{tree_node[1]}'
-            mermaid_lines.append(f'{current_id}["{label}"]')
-            mermaid_lines.append(f'classDef selection fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px,color:#000')
-            mermaid_lines.append(f'class {current_id} selection')
-            child_id = self._tree_to_mermaid(tree_node[2], mermaid_lines)
-            mermaid_lines.append(f'{current_id} --> {child_id}')
-            
-        elif operator == 'ρ':
-            label = f'ρ<br/>alias: {tree_node[1]}'
-            mermaid_lines.append(f'{current_id}["{label}"]')
-            mermaid_lines.append(f'classDef rename fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000')
-            mermaid_lines.append(f'class {current_id} rename')
-            child_id = self._tree_to_mermaid(tree_node[2], mermaid_lines)
-            mermaid_lines.append(f'{current_id} --> {child_id}')
-
-        elif operator == '⨝':
-            label = f'⨝<br/>{tree_node[1]}'
-            mermaid_lines.append(f'{current_id}{{{label}}}')
-            mermaid_lines.append(f'classDef join fill:#ffebee,stroke:#c62828,stroke-width:3px,color:#000')
-            mermaid_lines.append(f'class {current_id} join')
-            left_child_id = self._tree_to_mermaid(tree_node[2], mermaid_lines)
-            right_child_id = self._tree_to_mermaid(tree_node[3], mermaid_lines)
-            mermaid_lines.append(f'{current_id} --> {left_child_id}')
-            mermaid_lines.append(f'{current_id} --> {right_child_id}')
-
-        return current_id
-        
-    def generate_html_graph(self, sql_query, output_filename='grafo_relacional.html'):
-        print(f"\nConvertendo SQL para grafo HTML/Mermaid: '{sql_query}'")
+    def generate_image_graph(self, sql_query, output_filename='grafo_relacional.png'):
+        print(f"\nConvertendo SQL para imagem: '{sql_query}'")
         relational_tree = self.convert_to_tree(sql_query)
 
         if isinstance(relational_tree, str) and relational_tree.startswith("Erro"):
             print(relational_tree)
             return
 
+        G = nx.DiGraph()
         self.node_counter = 0
-        mermaid_lines = []
-        self._tree_to_mermaid(relational_tree, mermaid_lines)
-        mermaid_syntax = "graph TD\n    " + "\n    ".join(mermaid_lines)
+        pos_dict = {}
+        node_colors = {}
+        node_labels = {}
         
-        html_template = f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grafo de Álgebra Relacional</title>
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }}
-        .header {{
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }}
-        .header h1 {{
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
-            letter-spacing: 2px;
-        }}
-        .sql-query {{
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 30px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.6;
-            overflow-x: auto;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .graph-container {{
-            padding: 30px;
-            background: #fafafa;
-            text-align: center;
-        }}
-        .legend {{
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin: 20px 0;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }}
-        .legend-item {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 500;
-        }}
-        .legend-color {{
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-            border: 2px solid;
-        }}
-        .projection {{ background: #f3e5f5; border-color: #4a148c; }}
-        .selection {{ background: #e8f5e8; border-color: #1b5e20; }}
-        .join {{ background: #ffebee; border-color: #c62828; }}
-        .rename {{ background: #fff3e0; border-color: #e65100; }}
-        .table {{ background: #e1f5fe; border-color: #01579b; }}
+        root_id = self._add_nodes_to_graph(relational_tree, G, pos_dict, node_colors, node_labels)
         
-        #mermaidDiv {{
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-top: 20px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Álgebra Relacional</h1>
-            <p>Representação visual da consulta SQL</p>
-        </div>
+        pos = self._calculate_hierarchical_positions(G, root_id)
         
-        <div class="sql-query">
-            <strong>Consulta SQL:</strong><br>
-            {sql_query}
-        </div>
+        plt.figure(figsize=(14, 10))
+        plt.clf()
         
-        <div class="graph-container">
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color projection"></div>
-                    <span>π - Projeção (SELECT)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color selection"></div>
-                    <span>σ - Seleção (WHERE)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color join"></div>
-                    <span>⨝ - Junção (JOIN)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color rename"></div>
-                    <span>ρ - Renomeação (AS)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color table"></div>
-                    <span>Tabela</span>
-                </div>
-            </div>
-            
-            <div id="mermaidDiv" class="mermaid">
-                {mermaid_syntax}
-            </div>
-        </div>
-    </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <script>
-        mermaid.initialize({{
-            startOnLoad: true,
-            theme: 'base',
-            themeVariables: {{
-                primaryColor: '#ffffff',
-                primaryTextColor: '#000000',
-                primaryBorderColor: '#333333',
-                lineColor: '#333333',
-                secondaryColor: '#f9f9f9',
-                background: '#ffffff'
-            }},
-            flowchart: {{
-                useMaxWidth: true,
-                htmlLabels: true,
-                curve: 'basis'
-            }}
-        }});
-    </script>
-</body>
-</html>"""
+        color_map = {
+            'projection': '#f3e5f5',
+            'selection': '#e8f5e8', 
+            'join': '#ffebee',
+            'rename': '#fff3e0',
+            'table': '#e1f5fe'
+        }
         
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            f.write(html_template)
-            
+        for node_type, color in color_map.items():
+            nodes_of_type = [node for node, attr in node_colors.items() if attr == node_type]
+            if nodes_of_type:
+                nx.draw_networkx_nodes(G, pos, nodelist=nodes_of_type, 
+                                     node_color=color, node_size=3000,
+                                     edgecolors='black', linewidths=2)
+        
+        nx.draw_networkx_edges(G, pos, edge_color='#333333', arrows=True, 
+                              arrowsize=20, arrowstyle='->', width=2)
+        
+        for node, (x, y) in pos.items():
+            label = node_labels[node]
+            plt.text(x, y, label, ha='center', va='center', fontsize=9,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8),
+                    wrap=True)
+        
+        plt.title(f'Álgebra Relacional\nConsulta: {sql_query}', 
+                 fontsize=14, fontweight='bold', pad=20)
+        
+        legend_elements = [
+            mpatches.Patch(color='#f3e5f5', label='π - Projeção (SELECT)'),
+            mpatches.Patch(color='#e8f5e8', label='σ - Seleção (WHERE)'),
+            mpatches.Patch(color='#ffebee', label='JOIN - Junção (JOIN)'),
+            mpatches.Patch(color='#fff3e0', label='ρ - Renomeação (AS)'),
+            mpatches.Patch(color='#e1f5fe', label='Tabela')
+        ]
+        
+        plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+        
+        plt.axis('off')
+        
+        plt.tight_layout()
+        
+        plt.savefig(output_filename, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
+        
         full_path = os.path.abspath(output_filename)
-        print(f"Grafo HTML gerado com sucesso! Arquivo salvo como: {full_path}")
-        webbrowser.open(f"file://{full_path}")
+        print(f"Grafo em imagem gerado com sucesso! Arquivo salvo como: {full_path}")
+        
+        try:
+            os.startfile(full_path)
+        except OSError:
+            print("Imagem salva! Abra manualmente o arquivo para visualizar.")
+        
+        plt.close()
+    
+    def _add_nodes_to_graph(self, tree_node, G, pos_dict, node_colors, node_labels, level=0):
+        current_id = self._get_unique_id()
+        
+        if isinstance(tree_node, str):
+            G.add_node(current_id)
+            node_colors[current_id] = 'table'
+            node_labels[current_id] = tree_node
+            pos_dict[current_id] = level
+            return current_id
+
+        operator = tree_node[0]
+        
+        if operator == 'π':
+            G.add_node(current_id)
+            node_colors[current_id] = 'projection'
+            node_labels[current_id] = f'π\n{tree_node[1]}'
+            pos_dict[current_id] = level
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            G.add_edge(current_id, child_id)
+        
+        elif operator == 'σ':
+            G.add_node(current_id)
+            node_colors[current_id] = 'selection'
+            node_labels[current_id] = f'σ\n{tree_node[1]}'
+            pos_dict[current_id] = level
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            G.add_edge(current_id, child_id)
+            
+        elif operator == 'ρ':
+            G.add_node(current_id)
+            node_colors[current_id] = 'rename'
+            node_labels[current_id] = f'ρ\nalias: {tree_node[1]}'
+            pos_dict[current_id] = level
+            child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            G.add_edge(current_id, child_id)
+
+        elif operator == '⨝':
+            G.add_node(current_id)
+            node_colors[current_id] = 'join'
+            node_labels[current_id] = f'JOIN\n{tree_node[1]}'
+            pos_dict[current_id] = level
+            left_child_id = self._add_nodes_to_graph(tree_node[2], G, pos_dict, node_colors, node_labels, level + 1)
+            right_child_id = self._add_nodes_to_graph(tree_node[3], G, pos_dict, node_colors, node_labels, level + 1)
+            G.add_edge(current_id, left_child_id)
+            G.add_edge(current_id, right_child_id)
+
+        return current_id
+    
+    def _calculate_hierarchical_positions(self, G, root_id):
+        pos = {}
+        levels = {}
+        
+        queue = [(root_id, 0)]
+        visited = set()
+        
+        while queue:
+            node, level = queue.pop(0)
+            if node in visited:
+                continue
+            visited.add(node)
+            levels[node] = level
+            
+            for successor in G.successors(node):
+                if successor not in visited:
+                    queue.append((successor, level + 1))
+        
+        level_nodes = {}
+        for node, level in levels.items():
+            if level not in level_nodes:
+                level_nodes[level] = []
+            level_nodes[level].append(node)
+        
+        for level, nodes in level_nodes.items():
+            y = -level * 2
+            if len(nodes) == 1:
+                pos[nodes[0]] = (0, y)
+            else:
+                x_spacing = 4
+                total_width = (len(nodes) - 1) * x_spacing
+                start_x = -total_width / 2
+                for i, node in enumerate(nodes):
+                    pos[node] = (start_x + i * x_spacing, y)
+        
+        return pos
     
     def convert(self, sql_query):
         
@@ -336,10 +276,97 @@ class RelationalAlgebraConverter:
 if __name__ == "__main__":
     converter = RelationalAlgebraConverter()
 
-    sql = ("SELECT c.Nome, p.Nome, ped.DataPedido "
-           "FROM cliente AS c "
-           "INNER JOIN pedido ped ON c.idCliente = ped.Cliente_idCliente "
-           "INNER JOIN produto p ON ped.idProduto = p.idProduto "
-           "WHERE ped.ValorTotal > 100")
-    
-    converter.generate_html_graph(sql)
+    print("=" * 60)
+    print("EXEMPLO 1: Consulta simples com SELECT e WHERE")
+    print("=" * 60)
+    sql1 = "SELECT nome, idade FROM funcionarios WHERE salario > 5000"
+    print("SQL:", sql1)
+    print("Álgebra Relacional:", converter.convert(sql1))
+    converter.generate_image_graph(sql1, 'exemplo1_simples.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 2: Consulta com INNER JOIN")
+    print("=" * 60)
+    sql2 = ("SELECT f.nome, d.nome_departamento "
+            "FROM funcionarios f "
+            "INNER JOIN departamentos d ON f.dept_id = d.id")
+    print("SQL:", sql2)
+    print("Álgebra Relacional:", converter.convert(sql2))
+    converter.generate_image_graph(sql2, 'exemplo2_join.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 3: Consulta com múltiplos JOINs")
+    print("=" * 60)
+    sql3 = ("SELECT c.Nome, p.Nome, ped.DataPedido "
+            "FROM cliente AS c "
+            "INNER JOIN pedido ped ON c.idCliente = ped.Cliente_idCliente "
+            "INNER JOIN produto p ON ped.idProduto = p.idProduto "
+            "WHERE ped.ValorTotal > 100")
+    print("SQL:", sql3)
+    print("Álgebra Relacional:", converter.convert(sql3))
+    converter.generate_image_graph(sql3, 'exemplo3_multiplos_joins.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 4: Consulta com WHERE complexo")
+    print("=" * 60)
+    sql4 = ("SELECT e.nome, e.cargo, e.salario "
+            "FROM empregados AS e "
+            "WHERE e.salario > 3000 AND e.cargo = 'Analista'")
+    print("SQL:", sql4)
+    print("Álgebra Relacional:", converter.convert(sql4))
+    converter.generate_image_graph(sql4, 'exemplo4_where_complexo.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 5: Consulta com alias nas tabelas")
+    print("=" * 60)
+    sql5 = ("SELECT u.email, p.titulo "
+            "FROM usuarios AS u "
+            "INNER JOIN posts AS p ON u.id = p.user_id "
+            "WHERE p.status = 'publicado'")
+    print("SQL:", sql5)
+    print("Álgebra Relacional:", converter.convert(sql5))
+    converter.generate_image_graph(sql5, 'exemplo5_alias.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 6: Consulta apenas com SELECT")
+    print("=" * 60)
+    sql6 = "SELECT nome, telefone, email FROM clientes"
+    print("SQL:", sql6)
+    print("Álgebra Relacional:", converter.convert(sql6))
+    converter.generate_image_graph(sql6, 'exemplo6_apenas_select.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 7: Consulta acadêmica - Estudantes, Cursos e Matrículas")
+    print("=" * 60)
+    sql7 = ("SELECT est.nome, cur.nome_curso, mat.data_matricula "
+            "FROM estudantes est "
+            "INNER JOIN matriculas mat ON est.id = mat.estudante_id "
+            "INNER JOIN cursos cur ON mat.curso_id = cur.id "
+            "WHERE cur.ativo = 1")
+    print("SQL:", sql7)
+    print("Álgebra Relacional:", converter.convert(sql7))
+    converter.generate_image_graph(sql7, 'exemplo7_academico.png')
+
+    print("\n" + "=" * 60)
+    print("EXEMPLO 8: Sistema de vendas")
+    print("=" * 60)
+    sql8 = ("SELECT v.data_venda, prod.nome, v.quantidade "
+            "FROM vendas v "
+            "INNER JOIN produtos prod ON v.produto_id = prod.id "
+            "WHERE v.valor_total > 500")
+    print("SQL:", sql8)
+    print("Álgebra Relacional:", converter.convert(sql8))
+    converter.generate_image_graph(sql8, 'exemplo8_vendas.png')
+
+    print("\n" + "=" * 60)
+    print("TODOS OS EXEMPLOS FORAM PROCESSADOS!")
+    print("Arquivos PNG gerados:")
+    print("- exemplo1_simples.png")
+    print("- exemplo2_join.png") 
+    print("- exemplo3_multiplos_joins.png")
+    print("- exemplo4_where_complexo.png")
+    print("- exemplo5_alias.png")
+    print("- exemplo6_apenas_select.png")
+    print("- exemplo7_academico.png")
+    print("- exemplo8_vendas.png")
+    print("=" * 60)
