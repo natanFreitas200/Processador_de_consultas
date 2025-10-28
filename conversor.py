@@ -28,15 +28,15 @@ class RelationalAlgebraConverter:
         Returns:
             tuple: (base_table_info, joins_list)
         """
-        # Pattern para detectar INNER JOINs
+        # Pattern para detectar JOINs (INNER JOIN ou apenas JOIN)
         join_pattern = re.compile(
-            r"INNER\s+JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+INNER\s+JOIN|$)",
+            r"(?:INNER\s+)?JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+(?:INNER\s+)?JOIN|$)",
             re.IGNORECASE | re.DOTALL
         )
         
         # Extrair tabela base
         base_table_match = re.match(
-            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!INNER\b)\w+))?", 
+            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!(?:INNER\s+)?JOIN\b)\w+))?", 
             from_str, 
             re.IGNORECASE
         )
