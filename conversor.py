@@ -28,15 +28,15 @@ class RelationalAlgebraConverter:
         Returns:
             tuple: (base_table_info, joins_list)
         """
-        # Pattern para detectar JOINs (INNER JOIN ou apenas JOIN)
+        # Pattern para detectar INNER JOINs
         join_pattern = re.compile(
-            r"(?:INNER\s+)?JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+(?:INNER\s+)?JOIN|$)",
+            r"INNER\s+JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+INNER\s+JOIN|$)",
             re.IGNORECASE | re.DOTALL
         )
         
         # Extrair tabela base
         base_table_match = re.match(
-            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!(?:INNER\s+)?JOIN\b)\w+))?", 
+            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!INNER\b)\w+))?", 
             from_str, 
             re.IGNORECASE
         )
@@ -431,15 +431,73 @@ class RelationalAlgebraConverter:
             tuple: (is_valid, message)
         """
         try:
-            parsed_parts = self._parse_sql(sql_query)
-            if not parsed_parts:
-                return False, "Sintaxe SQL inválida"
+            # Remover espaços extras e ponto e vírgula
+            query_clean = ' '.join(sql_query.strip().rstrip(';').split())
             
+            # 1. Verificar palavras-chave duplicadas
+            if re.search(r'\b(SELECT\s+SELECT|FROM\s+FROM|WHERE\s+WHERE|ON\s+ON|JOIN\s+JOIN)\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: Palavra-chave duplicada detectada"
+            
+            # 2. Verificar INNER JOIN duplicado
+            if re.search(r'\bINNER\s+JOIN\s+INNER\s+JOIN\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: 'INNER JOIN INNER JOIN' detectado"
+            
+            # 3. Verificar operadores duplicados ou inválidos
+            if re.search(r'(>>|<<|==|>>|<<|> >|< <|\|\|)', query_clean):
+                return False, "Sintaxe inválida: Operador duplicado ou inválido detectado (>>, <<, ==, > >, etc.)"
+            
+            # 4. Verificar operadores lógicos duplicados ou inválidos
+            if re.search(r'\b(AND\s+OR|OR\s+AND|AND\s+AND|OR\s+OR)\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: Operadores lógicos inválidos (AND OR, OR AND, AND AND, OR OR)"
+            
+            # 5. Verificar WHERE usado como nome de tabela
+            if re.search(r'\bJOIN\s+WHERE\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: 'WHERE' não pode ser usado como nome de tabela"
+            
+            # 6. Verificar SELECT usado como valor
+            if re.search(r'=\s*SELECT\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: 'SELECT' usado incorretamente como valor"
+            
+            # 7. Verificar ON usado incorretamente
+            if re.search(r'\bFROM\s+\w+\s+ON\b', query_clean, re.IGNORECASE) and not re.search(r'\bJOIN\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: 'ON' usado sem JOIN"
+            
+            # 8. Verificar WHERE dentro do FROM/JOIN incorretamente
+            if re.search(r'\bFROM\s+.*?\s+WHERE\s+.*?\s+ON\b', query_clean, re.IGNORECASE):
+                return False, "Sintaxe inválida: 'WHERE' não pode aparecer entre FROM e ON"
+            
+            # 9. Verificar parênteses incorretos na lista de colunas
+            # Procura por colunas entre parênteses fora de contexto de função
+            columns_match = re.match(r'SELECT\s+(.*?)\s+FROM', query_clean, re.IGNORECASE)
+            if columns_match:
+                columns_part = columns_match.group(1)
+                # Detecta padrões como (Nome) ou Nome, (Email) que não são chamadas de função
+                if re.search(r'(?<!\w)\(\s*\w+\s*\)(?!\s*\()', columns_part):
+                    # Verifica se não é uma função válida (sem nome antes do parêntese)
+                    if not re.search(r'\w+\s*\(\s*\w+\s*\)', columns_part):
+                        return False, "Sintaxe inválida: Parênteses incorretos na lista de colunas"
+            
+            # 10. Parse básico da consulta
+            parsed_parts = self._parse_sql(query_clean)
+            if not parsed_parts:
+                return False, "Sintaxe SQL inválida: Estrutura básica SELECT...FROM não reconhecida"
+            
+            # 11. Validar cláusula FROM
             from_clause = parsed_parts.get('from_clause')
+            if not from_clause or not from_clause.strip():
+                return False, "Sintaxe inválida: Cláusula FROM vazia ou ausente"
+            
             base_table_info, joins = self._parse_from_clause(from_clause)
             
             if not base_table_info:
-                return False, "Tabela base não identificada na cláusula FROM"
+                return False, "Sintaxe inválida: Tabela base não identificada na cláusula FROM"
+            
+            # 12. Validar que palavras-chave SQL não são usadas como identificadores
+            reserved_as_identifiers = ['SELECT', 'FROM', 'WHERE', 'ON', 'JOIN', 'INNER']
+            columns = parsed_parts.get('columns', '')
+            for keyword in reserved_as_identifiers:
+                if re.search(r'\b' + keyword + r'\b(?!\s*(=|>|<|>=|<=|<>|JOIN|FROM))', columns, re.IGNORECASE):
+                    return False, f"Sintaxe inválida: Palavra-chave reservada '{keyword}' usada incorretamente"
             
             return True, "Consulta SQL válida"
         except Exception as e:
