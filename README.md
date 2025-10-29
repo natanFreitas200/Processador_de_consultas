@@ -1,120 +1,114 @@
-Processador de Consultas SQL (Álgebra Relacional)
+# Processador de Consultas SQL (Álgebra Relacional)
 
-Projeto educativo para implementar um processador de consultas SQL com parser, conversão para álgebra relacional, otimizações heurísticas, geração de grafo de operadores e uma interface gráfica para visualização.
+Breve: este projeto é uma implementação educativa em Python que faz parsing de consultas SQL limitadas, converte para álgebra relacional, aplica heurísticas simples de otimização, gera um grafo de operadores e exibe tudo isso em uma interface gráfica.
 
-Este repositório contém uma implementação em Python de um processador de consultas simplificado, desenvolvido para fins acadêmicos (trabalho de disciplina). O projeto oferece:
+Este README foi melhorado para ser mais direto: contém uma seção "Try it" (teste rápido), comandos práticos, descrição das partes principais e sugestões de extensão.
 
-- Parser simples para consultas SQL com suporte a: `SELECT`, `FROM`, `WHERE`, `INNER JOIN`.
-- Conversor para uma representação de Álgebra Relacional (string e árvore).
-- Otimizações heurísticas (push-down de seleções e projeções, reordenação básica de joins, escolha documentada de algoritmo de junção).
-- Construção de um grafo de operadores (nós: π, σ, ρ, ⨝ e tabelas) e visualização via GUI (Tkinter + matplotlib + networkx).
-- Validação básica de sintaxe e (opcional) validação de nomes de tabelas/colunas consultando um banco MySQL.
+## Try it — executar rápido
 
-## Estrutura do projeto
-
-- `interface_grafica.py` — Interface gráfica (Tkinter) que recebe a consulta, mostra validação, álgebra relacional, grafo e plano de execução.
-- `conversor.py` — Conversor SQL → Álgebra Relacional e geração de árvores/graph nodes.
-- `optimizer.py` — Implementação das heurísticas de otimização (logs e transformações básicas na árvore).
-- `query_processor.py` — Validação de consultas contra o esquema do banco (usa `db.py`).
-- `db.py` — Código para ler o esquema do MySQL (usa `python-dotenv` e `mysql-connector-python`).
-- `test.py` — Testes e exemplos rápidos para o conversor / processador.
-- `requirements.txt` — Dependências do projeto.
-- `.env` — (não comitado) arquivo com credenciais do banco; veja `.env.example`.
-
-## Requisitos
-
-- Python 3.8+ (testado com Python 3.13 neste ambiente)
-- MySQL (opcional — apenas se desejar validação contra esquema real)
-- Dependências Python (listadas em `requirements.txt`):
-  - matplotlib
-  - networkx
-  - mysql-connector-python
-  - python-dotenv
-
-## Instalação e uso (Windows PowerShell)
-
-1. Abra o PowerShell na pasta do projeto:
+1. Abra PowerShell na pasta do projeto:
 
 ```powershell
 cd 'C:\Users\Bene\Desktop\Codes\Processador_de_consultas'
 ```
 
-2. Ative o ambiente virtual (se existir `venv` na raiz):
+2. (Opcional) ative o venv do projeto:
 
 ```powershell
-# Ativa o venv existente
 .\venv\Scripts\Activate.ps1
 ```
 
-Se ainda não tiver criado um `venv` local, crie e ative:
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
-
-3. Instale as dependências:
+3. Instale dependências (somente se ainda não instalou):
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-4. Configure as credenciais do banco (opcional, só necessário para validação com MySQL):
-
-- Copie `.env.example` para `.env` e preencha com suas credenciais MySQL.
+4. (Opcional) configurar validação com MySQL:
 
 ```powershell
 copy .env.example .env
-# editar .env com um editor de texto e fornecer DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE
+# editar .env e preencher DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_DATABASE
 ```
 
-5. Execute a interface gráfica:
+5. Abrir a interface gráfica:
 
 ```powershell
 python interface_grafica.py
 ```
 
-ou (se preferir) execute `main.py` se este arquivo estiver configurado para iniciar a GUI.
+Exemplo de consulta para colar na GUI (testado pelos exemplos do projeto):
 
-## Como usar a GUI
-
-- Cole ou escreva uma consulta SQL no campo de entrada (ex.: `SELECT c.nome, p.valor FROM cliente c INNER JOIN pedidos p ON c.id = p.cliente_id WHERE p.valor > 500;`).
-- Clique em `Validar Consulta` para checar sintaxe (e — se configurado e com o BD disponível — nomes de tabela/coluna).
-- Clique em `Processar Consulta` para:
-  - Converter para álgebra relacional (string e árvore)
-  - Aplicar otimizações heurísticas
-  - Exibir grafo de operadores (versão otimizada e não otimizada)
-  - Gerar um plano de execução textual (ordem de execução) — atualmente gerado a partir do parse e das heurísticas aplicadas
-
-## Arquitetura e pontos importantes
-
-- O parser suporta a maioria dos exemplos do trabalho (SELECT, FROM, WHERE, INNER JOIN). Operadores suportados: `=, >, <, <=, >=, <>, AND, ( , )`.
-- O otimizador aplica push-down de seleção/projeção e registra ações no `optimization_log`. A reordenação de joins tem uma implementação básica que percorre e prioriza joins com seleções locais. A seleção de algoritmo (ex: Hash Join) é documentada no log; se desejar marcar explicitamente nos nós do grafo, adapte `optimizer.py` para apontar a estratégia escolhida no nó correspondente.
-- Validação de nomes de tabelas/colunas: `query_processor.py` usa `db.get_db_schema` (em `db.py`) para recuperar o esquema via `information_schema` do MySQL. Se o MySQL não estiver disponível ou as credenciais estiverem ausentes, `DB_SCHEMA` será `None` e a validação completa ficará desabilitada — o projeto continuará a funcionar localmente para parsing e visualização.
-
-## Testes e verificação
-
-- Para rodar os testes/exemplos rápidos incluídos:
-
-```powershell
-python test.py
+```sql
+SELECT c.nome, p.valor
+FROM cliente c
+INNER JOIN pedidos p ON c.id = p.cliente_id
+WHERE p.valor > 500;
 ```
 
-## Arquivos para editar / estender
+Ao clicar em "Processar Consulta" você verá:
+- Validação (sintaxe; se o DB estiver configurado, também valida nomes de tabelas/colunas)
+- A expressão em Álgebra Relacional (string)
+- O grafo de operadores (visual)
+- Um plano de execução textual mostrando as etapas otimizadas
 
-- `interface_grafica.py`: GUI e integração. Aqui você pode integrar totalmente `QueryProcessor` (validação completa) ou melhorar o plano textual para percorrer a árvore otimizada.
-- `conversor.py`: conversão SQL → árvore/algebra; altera o modo como o grafo é gerado.
-- `optimizer.py`: heurísticas; é o local para melhorar reordenação de joins com estimativas de custo e marcar algoritmos de execução.
+## O que há aqui (visão rápida dos arquivos)
 
-## Erros comuns / solução rápida
+- `interface_grafica.py`: GUI (Tkinter) — entrada de SQL, botões, abas e visualização com matplotlib + networkx.
+- `conversor.py`: parser e conversor SQL → árvore/álgebra; funções para gerar o grafo em memória.
+- `optimizer.py`: heurísticas implementadas (push-down de seleção/projeção, reordenação básica de joins, anotação de algoritmo de junção no log).
+- `query_processor.py`: validação contra esquema (usa `db.py` para recolher esquema via information_schema).
+- `db.py`: conexão com MySQL (usa variáveis de ambiente lidas por `python-dotenv`).
+- `test.py`: testes e exemplos rápidos.
 
-- Se ao iniciar a GUI ocorrer erro de conexão com MySQL: verifique o `.env`, se o servidor MySQL está em execução e as credenciais estão corretas. Enquanto isso, o parsing e a visualização funcionarão sem a validação do esquema.
-- Se o matplotlib reclamar do backend em ambiente headless, garanta que a execução seja em ambiente com display X (no Windows o TkAgg é padrão). O arquivo `interface_grafica.py` já define `matplotlib.use('TkAgg')`.
+## Principais comportamentos implementados
+
+- Parsing limitado a: SELECT, FROM, WHERE, INNER JOIN (com alias simples).
+- Operadores suportados nas expressões/condições: `=`, `>`, `<`, `<=`, `>=`, `<>`, `AND`, parênteses.
+- Otimizações aplicadas (documentadas no `optimization_log`):
+  - Push-down de seleções (σ) — evita processamento desnecessário em níveis superiores
+  - Push-down de projeções (π) — reduz número de atributos o mais cedo possível
+  - Reordenação básica de joins (prioriza joins com seleções locais)
+  - Marcação/registro de algoritmo preferido (Hash Join) no log — não altera o motor de execução (não há execução física de joins)
+
+## Sugestões de melhoria (próximos passos)
+
+1. Integrar `QueryProcessor` na GUI para que o botão "Validar" faça checagem completa contra o esquema (atualmente a validação de sintaxe usa `converter.validate_sql_syntax`).
+2. Gerar o plano de execução diretamente a partir da árvore otimizada (pós-ordem) e numerar as operações exatamente na ordem que o executor hipotético seguiria.
+3. Implementar estimativas simples de custo (`cardinality` heurística) para reordenar joins de forma mais precisa.
+4. (Opcional) Adicionar um modo "offline" onde o esquema pode ser carregado de um arquivo JSON para evitar necessidade de MySQL em demonstrações.
+
+## Problemas comuns e soluções rápidas
+
+- Erro ao conectar ao MySQL: verifique `.env` e se o serviço MySQL está rodando. Enquanto o MySQL estiver indisponível, parsing e visualização continuarão funcionando.
+- Erros com matplotlib/Tkinter: verifique se o ambiente tem suporte gráfico (no Windows, TkAgg costuma funcionar). Se executar em ambiente headless, o grafo não será exibido.
+
+## Comandos úteis
+
+Ativar venv e instalar dependências (PowerShell):
+
+```powershell
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Criar arquivo `.env` a partir do exemplo:
+
+```powershell
+copy .env.example .env
+notepad .env
+```
 
 ## Licença
 
-Este projeto é fornecido apenas como material de estudo. Sinta-se livre para adaptar. Caso deseje uma licença permissiva, adicione um arquivo `LICENSE` (por exemplo MIT).
+Este projeto é fornecido como material de estudo; inclua um arquivo `LICENSE` se quiser publicar com uma licença específica (MIT, Apache-2.0, etc.).
 
 ---
 
-Se quiser, posso: integrar a validação completa na GUI (usar `QueryProcessor` para validar nomes de tabela/coluna), gerar um plano de execução diretamente a partir da árvore otimizada, ou melhorar a reordenação de joins — diga qual dessas melhorias prefere que eu implemente.
+Se quiser, faço uma das seguintes melhorias automaticamente:
+
+- Integrar validação completa (`QueryProcessor`) na GUI (botão "Validar").
+- Substituir o gerador de plano textual para percorrer a árvore otimizada e listar as etapas reais de execução.
+- Melhorar a reordenação de joins com uma heurística simples de seletividade.
+
+Diga qual prefere que eu implemente que eu aplico as mudanças no código e testo localmente.

@@ -68,7 +68,7 @@ class QueryProcessor:
         """
         Valida a cláusula FROM, incluindo JOINs e garantindo que não há texto extra.
         """
-        last_index = 0
+        
         tables_map = {}
         
         # Valida tabela base
