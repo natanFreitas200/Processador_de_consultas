@@ -39,7 +39,7 @@ class ProcessadorConsultasGUI:
         self.node_styles = {
             'projection': {'c': '#8e44ad', 'ico': 'π', 'label': 'Projeção'},
             'selection':  {'c': '#27ae60', 'ico': 'σ', 'label': 'Seleção'},
-            'join':       {'c': '#c0392b', 'ico': '⨝', 'label': 'Junção'},
+            'join':       {'c': '#c0392b', 'ico': 'JOIN', 'label': 'Junção'},
             'rename':     {'c': '#f39c12', 'ico': 'ρ', 'label': 'Renomeação'},
             'table':      {'c': '#2980b9', 'ico': 'T', 'label': 'Tabela'}
         }
@@ -96,11 +96,7 @@ class ProcessadorConsultasGUI:
             else:
                 frame.columnconfigure(0, weight=1)
                 frame.rowconfigure(1, weight=1)
-                title_map = {
-                    "Validação SQL": "Resultado da Validação:",
-                    "Álgebra Relacional": "Expressão em Álgebra Relacional:",
-                    "Plano de Execução": "Ordem de Execução da Consulta (OTIMIZADO):"
-                }
+                title_map = { "Validação SQL": "Resultado da Validação:", "Álgebra Relacional": "Expressão em Álgebra Relacional:", "Plano de Execução": "Ordem de Execução da Consulta (OTIMIZADO):" }
                 ttk.Label(frame, text=title_map[name], font=('Arial', 12, 'bold')).grid(row=0, column=0, sticky=tk.W)
                 text_widget = scrolledtext.ScrolledText(frame, height=15, font=('Courier New', 10), relief=tk.SOLID, borderwidth=1)
                 text_widget.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
@@ -131,33 +127,19 @@ class ProcessadorConsultasGUI:
         self.graph_canvas.draw()
         
     def add_example_queries(self):
-        """
-        *** ESTA É A SEÇÃO ATUALIZADA COM AS CONSULTAS COMPLEXAS ***
-        """
         complex_queries = [
-            # Consulta 1: JOIN de 4 tabelas com WHERE complexo (AND e OR com parênteses)
             "SELECT c.Nome, prod.Nome AS Produto, ped.ValorTotalPedido FROM Cliente AS c INNER JOIN Pedido AS ped ON c.idCliente = ped.Cliente_idCliente INNER JOIN Pedido_has_Produto AS pp ON ped.idPedido = pp.Pedido_idPedido INNER JOIN Produto AS prod ON pp.Produto_idProduto = prod.idProduto WHERE (c.TipoCliente_idTipoCliente = 1 AND ped.ValorTotalPedido > 500) OR prod.Preco < 20;",
-
-            # Consulta 2: JOIN profundo (5 tabelas) com filtros em pontas opostas da árvore.
             "SELECT tc.Descricao, c.Nome, ped.idPedido, prod.Nome, pp.Quantidade FROM TipoCliente tc INNER JOIN Cliente c ON tc.idTipoCliente = c.TipoCliente_idTipoCliente INNER JOIN Pedido ped ON c.idCliente = ped.Cliente_idCliente INNER JOIN Pedido_has_Produto pp ON ped.idPedido = pp.Pedido_idPedido INNER JOIN Produto prod ON pp.Produto_idProduto = prod.idProduto WHERE tc.idTipoCliente = 1 AND prod.Preco > 500;",
-            
-            # Consulta 3: JOIN triplo com SELECT *
             "SELECT * FROM Cliente c INNER JOIN Pedido p ON c.idCliente = p.Cliente_idCliente INNER JOIN Status s ON p.Status_idStatus = s.idStatus WHERE s.idStatus = 3;",
-
-            # Consulta 4: JOIN entre tabelas "vizinhas" do cliente (grafo mais largo).
             "SELECT c.Nome, e.Cidade, t.Numero AS Telefone, tc.Descricao AS Tipo FROM Cliente c INNER JOIN Endereco e ON c.idCliente = e.Cliente_idCliente INNER JOIN Telefone t ON c.idCliente = t.Cliente_idCliente INNER JOIN TipoCliente tc ON c.TipoCliente_idTipoCliente = tc.idTipoCliente WHERE e.UF = 'SP';",
         ]
-        
         simple_valid_queries = [
             "SELECT Nome, Preco FROM Produto WHERE Preco > 100 AND Categoria_idCategoria = 1;",
             "SELECT c.Nome, p.DataPedido FROM Cliente c INNER JOIN Pedido p ON c.idCliente = p.Cliente_idCliente;",
         ]
-
         self.example_queries = complex_queries + simple_valid_queries
         self.example_index = 0
-        self.sql_entry.delete("1.0", tk.END)
-        self.sql_entry.insert(tk.END, self.example_queries[0])
-
+        self.sql_entry.delete("1.0", tk.END); self.sql_entry.insert(tk.END, self.example_queries[0])
 
     def next_example_query(self):
         self.example_index = (self.example_index + 1) % len(self.example_queries)
@@ -181,13 +163,13 @@ class ProcessadorConsultasGUI:
             is_valid, msg = self.query_processor.validate_query(sql_query)
             validator_used = "QueryProcessor (validador completo)"
             if not self.query_processor.schema:
-                msg += "\n\nAviso: Conexão com o banco de dados não disponível. A validação de nomes de tabelas/colunas foi ignorada."
+                msg += "\n\nAviso: Conexão com o banco de dados não disponível."
         else:
             is_valid, msg = self.converter.validate_sql_syntax(sql_query)
-            validator_used = "Conversor (validador de sintaxe básica)"
-            msg += "\n\nAviso: Módulo 'QueryProcessor' não pôde ser iniciado. Usando validação de sintaxe simplificada."
+            validator_used = "Conversor (sintaxe básica)"
+            msg += "\n\nAviso: 'QueryProcessor' não iniciado. Usando validação simplificada."
 
-        final_msg += f"Validador Utilizado: {validator_used}\n"
+        final_msg += f"Validador: {validator_used}\n"
         final_msg += f"Resultado: {msg}\n\n"
         final_msg += "✅ CONSULTA VÁLIDA!" if is_valid else "❌ CONSULTA INVÁLIDA!"
         
@@ -200,13 +182,10 @@ class ProcessadorConsultasGUI:
             messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
             return
 
-        if self.query_processor:
-            is_valid, msg = self.query_processor.validate_query(sql_query)
-        else:
-            is_valid, msg = self.converter.validate_sql_syntax(sql_query)
-
+        is_valid, msg = (self.query_processor.validate_query(sql_query) if self.query_processor 
+                         else self.converter.validate_sql_syntax(sql_query))
         if not is_valid:
-            messagebox.showerror("Consulta Inválida", f"A consulta SQL é inválida e não pode ser processada.\n\nMotivo: {msg}")
+            messagebox.showerror("Consulta Inválida", f"A consulta não pode ser processada.\n\nMotivo: {msg}")
             return
         
         self.limpar_resultados()
@@ -230,11 +209,9 @@ class ProcessadorConsultasGUI:
         self.álgebra_relacional_text.delete("1.0", tk.END)
         self.álgebra_relacional_text.insert(tk.END, f"SQL Original:\n{sql}\n\nExpressão (Não Otimizada):\n{algebra_str}\n\n{'='*70}\nOTIMIZAÇÕES APLICADAS:\n{opt_log}")
         
-        self.plano_de_execução_text.delete("1.0", tk.END)
-        self.plano_de_execução_text.insert(tk.END, plan)
+        self.plano_de_execução_text.delete("1.0", tk.END); self.plano_de_execução_text.insert(tk.END, plan)
         
-        self.atualizar_grafo_visual()
-        self.notebook.select(2)
+        self.atualizar_grafo_visual(); self.notebook.select(2)
 
     def atualizar_grafo_visual(self):
         if not self.current_sql: return
@@ -256,86 +233,90 @@ class ProcessadorConsultasGUI:
         except Exception as e:
             self.graph_ax.clear()
             self.graph_ax.text(0.5, 0.5, f'Erro ao gerar o grafo:\n{e}', ha='center', va='center', color='red')
-            self.graph_ax.axis('off')
-            self.graph_canvas.draw()
+            self.graph_ax.axis('off'); self.graph_canvas.draw()
+
+    def _darken_color(self, hex_color, factor=0.7):
+        if hex_color.startswith('#'): hex_color = hex_color[1:]
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        darker_rgb = tuple(int(c * factor) for c in rgb)
+        return f"#{darker_rgb[0]:02x}{darker_rgb[1]:02x}{darker_rgb[2]:02x}"
 
     def _desenhar_texto_com_sombra(self, x, y, text, **kwargs):
-        text_props = kwargs.copy()
-        zorder = text_props.pop('zorder', 5)
-        shadow_offset = 0.008
-        self.graph_ax.text(x + shadow_offset, y - shadow_offset, text, **text_props, color='#2c3e50', zorder=zorder - 1)
-        self.graph_ax.text(x, y, text, **text_props, color='white', zorder=zorder)
+        props = kwargs.copy()
+        zorder = props.pop('zorder', 5); shadow_offset = 0.008
+        self.graph_ax.text(x + shadow_offset, y - shadow_offset, text, **props, color='#2c3e50', zorder=zorder - 1)
+        self.graph_ax.text(x, y, text, **props, color='white', zorder=zorder)
 
     def _desenhar_grafo_integrado(self, G, pos, node_colors, node_labels, sql_query, title_suffix, badge_color):
-        styles = self.node_styles
+        base_icon_fs, base_details_fs = 18, 9
+        shadow_alpha, shadow_offset = 0.15, 0.07
+
         for node in G.nodes():
-            x, y = pos[node]; node_type = node_colors.get(node, 'table'); style = styles[node_type]; label = node_labels.get(node, '')
-            shape = {'projection': 'circle', 'join': 'diamond'}.get(node_type, 'rect')
-            s_off = 0.05
+            x, y = pos[node]
+            node_type = node_colors.get(node, 'table')
+            style = self.node_styles[node_type]
+            label = node_labels.get(node, '')
+            edge_color = self._darken_color(style['c'])
             
+            shape = {'projection': 'circle', 'join': 'diamond'}.get(node_type, 'rect')
+
             if shape == 'circle':
-                self.graph_ax.add_patch(patches.Circle((x + s_off, y - s_off), 0.5, fc='black', alpha=0.2))
-                self.graph_ax.add_patch(patches.Circle((x, y), 0.5, fc=style['c'], ec='white', lw=2.5, zorder=3))
+                radius = 0.55
+                self.graph_ax.add_patch(patches.Circle((x + shadow_offset, y - shadow_offset), radius, fc='black', alpha=shadow_alpha))
+                self.graph_ax.add_patch(patches.Circle((x, y), radius, fc=style['c'], ec=edge_color, lw=2, zorder=3))
             elif shape == 'diamond':
-                points = [[x, y + 0.65], [x + 0.55, y], [x, y - 0.65], [x - 0.55, y]]
-                self.graph_ax.add_patch(patches.Polygon([[p[0]+s_off, p[1]-s_off] for p in points], fc='black', alpha=0.2))
-                self.graph_ax.add_patch(patches.Polygon(points, fc=style['c'], ec='white', lw=2.5, zorder=3))
-            else:
-                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7+s_off, y-0.45-s_off), 1.4, 0.9, boxstyle="round,pad=0.1", fc='black', alpha=0.2))
-                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7, y-0.45), 1.4, 0.9, boxstyle="round,pad=0.1", fc=style['c'], ec='white', lw=2.5, zorder=3))
+                h, w = 0.75, 0.75
+                points = [[x, y + h], [x + w, y], [x, y - h], [x - w, y]]
+                self.graph_ax.add_patch(patches.Polygon([[p[0] + shadow_offset, p[1] - shadow_offset] for p in points], fc='black', alpha=shadow_alpha))
+                self.graph_ax.add_patch(patches.Polygon(points, fc=style['c'], ec=edge_color, lw=2, zorder=3))
+            else: # rect
+                w, h = 1.6, 1.0
+                self.graph_ax.add_patch(patches.FancyBboxPatch((x-w/2+shadow_offset, y-h/2-shadow_offset), w, h, boxstyle="round,pad=0.1", fc='black', alpha=shadow_alpha))
+                self.graph_ax.add_patch(patches.FancyBboxPatch((x-w/2, y-h/2), w, h, boxstyle="round,pad=0.1", fc=style['c'], ec=edge_color, lw=2, zorder=3))
             
             common_props = {'ha': 'center', 'fontweight': 'bold', 'zorder': 5}
             if node_type == 'table':
-                props = {**common_props, 'va': 'center', 'fontsize': 11}
-                self._desenhar_texto_com_sombra(x, y, self._wrap_label(label, 15), **props)
+                self._desenhar_texto_com_sombra(x, y, self._wrap_label(label, 15), **{**common_props, 'va': 'center', 'fontsize': 11})
             else:
-                parts = label.split('\n')
-                icon = style['ico']
-                details = '\n'.join(parts[1:])
-                icon_props = {**common_props, 'va': 'center', 'fontsize': 18}
-                self._desenhar_texto_com_sombra(x, y + 0.18, icon, **icon_props)
-                details_props = {**common_props, 'va': 'top', 'fontsize': 10}
-                self._desenhar_texto_com_sombra(x, y - 0.15, self._wrap_label(details, 20), **details_props)
+                icon, details = style['ico'], '\n'.join(label.split('\n')[1:])
+                icon_fs = base_icon_fs - 4 if node_type == 'join' else base_icon_fs
+                self._desenhar_texto_com_sombra(x, y + 0.15, icon, **{**common_props, 'va': 'center', 'fontsize': icon_fs})
+                self._desenhar_texto_com_sombra(x, y - 0.1, self._wrap_label(details, 22), **{**common_props, 'va': 'top', 'fontsize': base_details_fs, 'fontweight': 'normal'})
 
-        for edge in G.edges():
-            pos_start, pos_end = pos[edge[0]], pos[edge[1]]
-            shadow_offset = [0.03, -0.03]
-            pos_start_shadow = (pos_start[0] + shadow_offset[0], pos_start[1] + shadow_offset[1])
-            pos_end_shadow = (pos_end[0] + shadow_offset[0], pos_end[1] + shadow_offset[1])
-            self.graph_ax.add_patch(patches.FancyArrowPatch(pos_start_shadow, pos_end_shadow, connectionstyle="arc3,rad=0.15", arrowstyle="-|>", mutation_scale=25, color='#000000', alpha=0.2, lw=2.5, zorder=1))
-            self.graph_ax.add_patch(patches.FancyArrowPatch(pos_start, pos_end, connectionstyle="arc3,rad=0.15", arrowstyle="-|>", mutation_scale=25, color='#34495e', lw=2.5, zorder=2))
+        for u, v in G.edges():
+            pos_start, pos_end = pos[u], pos[v]
+            style = "arc3,rad=0.2"
+            arrow_shadow = patches.FancyArrowPatch(
+                (pos_start[0] + 0.03, pos_start[1] - 0.03), (pos_end[0] + 0.03, pos_end[1] - 0.03),
+                connectionstyle=style, arrowstyle="-|>", mutation_scale=25, color='black', alpha=0.1, lw=2.5, zorder=1)
+            arrow = patches.FancyArrowPatch(
+                pos_start, pos_end, connectionstyle=style, arrowstyle="-|>", mutation_scale=25, color='#34495e', lw=2, zorder=2)
+            self.graph_ax.add_patch(arrow_shadow); self.graph_ax.add_patch(arrow)
 
         subtitle = f'{sql_query[:70]}{"..." if len(sql_query) > 70 else ""}'
-        self.graph_ax.text(0.5, 0.97, f'Grafo de Álgebra Relacional - {title_suffix}', transform=self.graph_ax.transAxes, fontsize=16, fontweight='bold', ha='center', va='top', bbox=dict(boxstyle="round,pad=0.3", fc=badge_color, ec='white', lw=2), color='white')
-        self.graph_ax.text(0.5, 0.92, subtitle, transform=self.graph_ax.transAxes, fontsize=11, ha='center', va='top', style='italic', color='#34495e')
+        self.graph_ax.text(0.5, 0.97, f'Grafo de Álgebra Relacional - {title_suffix}', ha='center', va='top', transform=self.graph_ax.transAxes, fontsize=16, fontweight='bold', color='white', bbox=dict(boxstyle="round,pad=0.3", fc=badge_color, ec='white', lw=2))
+        self.graph_ax.text(0.5, 0.92, subtitle, ha='center', va='top', transform=self.graph_ax.transAxes, fontsize=11, style='italic', color='#34495e')
         self._add_legend()
 
         if pos:
             x_coords, y_coords = [c[0] for c in pos.values()], [c[1] for c in pos.values()]
-            self.graph_ax.set_xlim(min(x_coords) - 1.5, max(x_coords) + 1.5)
-            self.graph_ax.set_ylim(min(y_coords) - 1.5, max(y_coords) + 1.5)
+            self.graph_ax.set_xlim(min(x_coords) - 2, max(x_coords) + 2)
+            self.graph_ax.set_ylim(min(y_coords) - 2, max(y_coords) + 2)
 
     def _add_legend(self):
         items = [{'icon': v['ico'], 'c': v['c'], 't': v['label']} for k, v in self.node_styles.items()]
         lx, ly = -0.12, 0.98
+        height, width = (len(items) + 1) * 0.05, 0.2
 
-        height = (len(items) + 1) * 0.05
-        width = 0.2
-        shadow_offset = [0.008, -0.008]
-
-        shadow_patch = patches.FancyBboxPatch((lx - 0.01 + shadow_offset[0], ly - height - 0.03 + shadow_offset[1]), width, height, boxstyle="round,pad=0.02", fc='black', ec=None, alpha=0.2, transform=self.graph_ax.transAxes, zorder=9)
-        self.graph_ax.add_patch(shadow_patch)
         bg_patch = patches.FancyBboxPatch((lx - 0.01, ly - height - 0.03), width, height, boxstyle="round,pad=0.02", fc='#fdfefd', ec='#bdc3c7', alpha=0.95, transform=self.graph_ax.transAxes, zorder=10)
         self.graph_ax.add_patch(bg_patch)
 
-        title_x = lx + (width / 2) - 0.01
-        icon_x = lx + 0.03
-        text_x = lx + 0.07
-
+        title_x, icon_x, text_x = lx + (width / 2) - 0.01, lx + 0.03, lx + 0.07
         self.graph_ax.text(title_x, ly - 0.02, 'Operadores', transform=self.graph_ax.transAxes, fontsize=11, fontweight='bold', ha='center', va='top', zorder=11)
         for i, item in enumerate(items):
             y_pos = ly - (i + 1.5) * 0.048
-            self.graph_ax.text(icon_x, y_pos, item['icon'], transform=self.graph_ax.transAxes, fontsize=14, color=item['c'], ha='center', va='center', fontweight='bold', zorder=11)
+            icon_fs = 11 if item['icon'] == 'JOIN' else 14
+            self.graph_ax.text(icon_x, y_pos, item['icon'], transform=self.graph_ax.transAxes, fontsize=icon_fs, color=item['c'], ha='center', va='center', fontweight='bold', zorder=11)
             self.graph_ax.text(text_x, y_pos, item['t'], transform=self.graph_ax.transAxes, fontsize=10, ha='left', va='center', zorder=11)
 
     def _wrap_label(self, text, width):
@@ -356,7 +337,7 @@ class ProcessadorConsultasGUI:
             widget.delete("1.0", tk.END)
         self.current_sql = None
         self.graph_ax.clear(); self.graph_ax.axis('off');
-        self.graph_ax.text(0.5, 0.5, 'Interface limpa. Aguardando nova consulta.', ha='center', va='center', fontsize=14, color='gray')
+        self.graph_ax.text(0.5, 0.5, 'Interface limpa.', ha='center', va='center', fontsize=14, color='gray')
         self.graph_canvas.draw()
         
     def _generate_optimized_execution_plan(self, sql_query):
@@ -369,15 +350,11 @@ class ProcessadorConsultasGUI:
             where = parsed.get('where'); cols = parsed.get('columns', '*')
             
             step = 1
-            if where:
-                plan += f"{step}. SELEÇÃO (σ) IMEDIATA:\n   - Condição: {where}\n   - Otimização: Filtra dados na fonte, reduzindo o volume para as próximas etapas.\n\n"; step += 1
-            if cols != '*':
-                plan += f"{step}. PROJEÇÃO (π) ANTECIPADA:\n   - Colunas: {cols}\n   - Otimização: Remove colunas desnecessárias cedo, diminuindo o uso de memória.\n\n"; step += 1
-            if base_info:
-                plan += f"{step}. ACESSO À TABELA BASE: {base_info.get('table')}\n   - Acessa a primeira tabela, aplicando filtros (σ) e projeções (π) se possível.\n\n"; step += 1
-            for i, join in enumerate(joins):
-                plan += f"{step}. JUNÇÃO (⨝) EFICIENTE #{i+1}:\n   - Tabelas: Com {join.get('join_table')}\n   - Condição: {join.get('join_on')}\n   - Otimização: Executa o join sobre dados já filtrados e projetados.\n\n"; step += 1
-            plan += f"{step}. RESULTADO FINAL:\n   - Agrega os resultados e retorna as colunas finais solicitadas.\n"
+            if where: plan += f"{step}. SELEÇÃO (σ) IMEDIATA:\n   - Condição: {where}\n\n"; step += 1
+            if cols != '*': plan += f"{step}. PROJEÇÃO (π) ANTECIPADA:\n   - Colunas: {cols}\n\n"; step += 1
+            if base_info: plan += f"{step}. ACESSO À TABELA BASE: {base_info.get('table')}\n\n"; step += 1
+            for i, join in enumerate(joins): plan += f"{step}. JUNÇÃO (⨝) EFICIENTE #{i+1}:\n   - Tabelas: Com {join.get('join_table')}\n   - Condição: {join.get('join_on')}\n\n"; step += 1
+            plan += f"{step}. RESULTADO FINAL.\n"
             return plan
         except Exception as e: return f"Erro ao gerar plano: {str(e)}"
 
