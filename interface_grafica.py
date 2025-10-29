@@ -68,7 +68,7 @@ class ProcessadorConsultasGUI:
         input_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         input_frame.columnconfigure(0, weight=1)
         
-        self.sql_entry = scrolledtext.ScrolledText(input_frame, height=4, width=70,
+        self.sql_entry = scrolledtext.ScrolledText(input_frame, height=5, width=70,
                                                    wrap=tk.WORD, font=('Courier New', 10), relief=tk.SOLID, borderwidth=1)
         self.sql_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 10))
         
@@ -131,9 +131,33 @@ class ProcessadorConsultasGUI:
         self.graph_canvas.draw()
         
     def add_example_queries(self):
-        self.example_queries = ["SELECT c.nome, p.valor FROM cliente c INNER JOIN pedidos p ON c.id = p.cliente_id WHERE p.valor > 500;", "SELECT Nome, Email FROM cliente WHERE idade > 25;", "SELECT * FROM pedidos WHERE valor > 100;", "SELECT e.nome, d.nome FROM empregado e INNER JOIN departamento d ON e.dept_id = d.id WHERE e.salario > 5000;"]
+        """
+        *** ESTA É A SEÇÃO ATUALIZADA COM AS CONSULTAS COMPLEXAS ***
+        """
+        complex_queries = [
+            # Consulta 1: JOIN de 4 tabelas com WHERE complexo (AND e OR com parênteses)
+            "SELECT c.Nome, prod.Nome AS Produto, ped.ValorTotalPedido FROM Cliente AS c INNER JOIN Pedido AS ped ON c.idCliente = ped.Cliente_idCliente INNER JOIN Pedido_has_Produto AS pp ON ped.idPedido = pp.Pedido_idPedido INNER JOIN Produto AS prod ON pp.Produto_idProduto = prod.idProduto WHERE (c.TipoCliente_idTipoCliente = 1 AND ped.ValorTotalPedido > 500) OR prod.Preco < 20;",
+
+            # Consulta 2: JOIN profundo (5 tabelas) com filtros em pontas opostas da árvore.
+            "SELECT tc.Descricao, c.Nome, ped.idPedido, prod.Nome, pp.Quantidade FROM TipoCliente tc INNER JOIN Cliente c ON tc.idTipoCliente = c.TipoCliente_idTipoCliente INNER JOIN Pedido ped ON c.idCliente = ped.Cliente_idCliente INNER JOIN Pedido_has_Produto pp ON ped.idPedido = pp.Pedido_idPedido INNER JOIN Produto prod ON pp.Produto_idProduto = prod.idProduto WHERE tc.idTipoCliente = 1 AND prod.Preco > 500;",
+            
+            # Consulta 3: JOIN triplo com SELECT *
+            "SELECT * FROM Cliente c INNER JOIN Pedido p ON c.idCliente = p.Cliente_idCliente INNER JOIN Status s ON p.Status_idStatus = s.idStatus WHERE s.idStatus = 3;",
+
+            # Consulta 4: JOIN entre tabelas "vizinhas" do cliente (grafo mais largo).
+            "SELECT c.Nome, e.Cidade, t.Numero AS Telefone, tc.Descricao AS Tipo FROM Cliente c INNER JOIN Endereco e ON c.idCliente = e.Cliente_idCliente INNER JOIN Telefone t ON c.idCliente = t.Cliente_idCliente INNER JOIN TipoCliente tc ON c.TipoCliente_idTipoCliente = tc.idTipoCliente WHERE e.UF = 'SP';",
+        ]
+        
+        simple_valid_queries = [
+            "SELECT Nome, Preco FROM Produto WHERE Preco > 100 AND Categoria_idCategoria = 1;",
+            "SELECT c.Nome, p.DataPedido FROM Cliente c INNER JOIN Pedido p ON c.idCliente = p.Cliente_idCliente;",
+        ]
+
+        self.example_queries = complex_queries + simple_valid_queries
         self.example_index = 0
-        self.sql_entry.delete("1.0", tk.END); self.sql_entry.insert(tk.END, self.example_queries[0])
+        self.sql_entry.delete("1.0", tk.END)
+        self.sql_entry.insert(tk.END, self.example_queries[0])
+
 
     def next_example_query(self):
         self.example_index = (self.example_index + 1) % len(self.example_queries)
@@ -147,25 +171,18 @@ class ProcessadorConsultasGUI:
         
         self.validação_sql_text.delete("1.0", tk.END)
         self.validação_sql_text.insert(tk.END, "Validando...")
-        self.notebook.select(0) # Mudar para a aba de validação
+        self.notebook.select(0)
         threading.Thread(target=self._validar_consulta_thread, args=(sql_query,), daemon=True).start()
 
     def _validar_consulta_thread(self, sql_query):
-        """
-        Valida a consulta SQL, priorizando o validador robusto do QueryProcessor.
-        Se o QueryProcessor não estiver disponível, usa o validador de sintaxe
-        do conversor como uma alternativa.
-        """
         final_msg = f"Consulta SQL:\n{sql_query}\n\n=== RESULTADO DA VALIDAÇÃO ===\n"
         
-        # Prioriza o uso do QueryProcessor, que é mais completo.
         if self.query_processor:
             is_valid, msg = self.query_processor.validate_query(sql_query)
             validator_used = "QueryProcessor (validador completo)"
             if not self.query_processor.schema:
                 msg += "\n\nAviso: Conexão com o banco de dados não disponível. A validação de nomes de tabelas/colunas foi ignorada."
         else:
-            # Fallback para o validador mais simples se o QueryProcessor falhou ao iniciar.
             is_valid, msg = self.converter.validate_sql_syntax(sql_query)
             validator_used = "Conversor (validador de sintaxe básica)"
             msg += "\n\nAviso: Módulo 'QueryProcessor' não pôde ser iniciado. Usando validação de sintaxe simplificada."
@@ -183,7 +200,6 @@ class ProcessadorConsultasGUI:
             messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
             return
 
-        # Etapa de validação antes de processar, usando a mesma lógica do botão "Validar"
         if self.query_processor:
             is_valid, msg = self.query_processor.validate_query(sql_query)
         else:
@@ -218,7 +234,7 @@ class ProcessadorConsultasGUI:
         self.plano_de_execução_text.insert(tk.END, plan)
         
         self.atualizar_grafo_visual()
-        self.notebook.select(2) # Mudar para a aba do Grafo Visual
+        self.notebook.select(2)
 
     def atualizar_grafo_visual(self):
         if not self.current_sql: return
