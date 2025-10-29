@@ -36,6 +36,14 @@ class ProcessadorConsultasGUI:
         self.current_optimized_tree = None
         self.current_sql = None
         
+        self.node_styles = {
+            'projection': {'c': '#8e44ad', 'ico': 'π', 'label': 'Projeção'},
+            'selection':  {'c': '#27ae60', 'ico': 'σ', 'label': 'Seleção'},
+            'join':       {'c': '#c0392b', 'ico': '⨝', 'label': 'Junção'},
+            'rename':     {'c': '#f39c12', 'ico': 'ρ', 'label': 'Renomeação'},
+            'table':      {'c': '#2980b9', 'ico': 'T', 'label': 'Tabela'}
+        }
+        
         self.graph_view_var = tk.StringVar(value="optimized")
         
         self.setup_interface()
@@ -88,8 +96,12 @@ class ProcessadorConsultasGUI:
             else:
                 frame.columnconfigure(0, weight=1)
                 frame.rowconfigure(1, weight=1)
-                title = {"Validação SQL": "Resultado da Validação:","Álgebra Relacional": "Expressão em Álgebra Relacional:", "Plano de Execução": "Ordem de Execução da Consulta (OTIMIZADO):"}[name]
-                ttk.Label(frame, text=title, font=('Arial', 12, 'bold')).grid(row=0, column=0, sticky=tk.W)
+                title_map = {
+                    "Validação SQL": "Resultado da Validação:",
+                    "Álgebra Relacional": "Expressão em Álgebra Relacional:",
+                    "Plano de Execução": "Ordem de Execução da Consulta (OTIMIZADO):"
+                }
+                ttk.Label(frame, text=title_map[name], font=('Arial', 12, 'bold')).grid(row=0, column=0, sticky=tk.W)
                 text_widget = scrolledtext.ScrolledText(frame, height=15, font=('Courier New', 10), relief=tk.SOLID, borderwidth=1)
                 text_widget.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
                 setattr(self, f"{name.lower().replace(' ', '_')}_text", text_widget)
@@ -129,20 +141,60 @@ class ProcessadorConsultasGUI:
 
     def validar_consulta(self):
         sql_query = self.sql_entry.get("1.0", tk.END).strip()
-        if not sql_query: return messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
-        self.validação_sql_text.delete("1.0", tk.END); self.validação_sql_text.insert(tk.END, "Validando...")
+        if not sql_query: 
+            messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
+            return
+        
+        self.validação_sql_text.delete("1.0", tk.END)
+        self.validação_sql_text.insert(tk.END, "Validando...")
+        self.notebook.select(0) # Mudar para a aba de validação
         threading.Thread(target=self._validar_consulta_thread, args=(sql_query,), daemon=True).start()
 
     def _validar_consulta_thread(self, sql_query):
-        is_valid, msg = self.converter.validate_sql_syntax(sql_query)
-        final_msg = f"Consulta SQL:\n{sql_query}\n\n=== RESULTADO DA VALIDAÇÃO ===\n{msg}\n\n"
+        """
+        Valida a consulta SQL, priorizando o validador robusto do QueryProcessor.
+        Se o QueryProcessor não estiver disponível, usa o validador de sintaxe
+        do conversor como uma alternativa.
+        """
+        final_msg = f"Consulta SQL:\n{sql_query}\n\n=== RESULTADO DA VALIDAÇÃO ===\n"
+        
+        # Prioriza o uso do QueryProcessor, que é mais completo.
+        if self.query_processor:
+            is_valid, msg = self.query_processor.validate_query(sql_query)
+            validator_used = "QueryProcessor (validador completo)"
+            if not self.query_processor.schema:
+                msg += "\n\nAviso: Conexão com o banco de dados não disponível. A validação de nomes de tabelas/colunas foi ignorada."
+        else:
+            # Fallback para o validador mais simples se o QueryProcessor falhou ao iniciar.
+            is_valid, msg = self.converter.validate_sql_syntax(sql_query)
+            validator_used = "Conversor (validador de sintaxe básica)"
+            msg += "\n\nAviso: Módulo 'QueryProcessor' não pôde ser iniciado. Usando validação de sintaxe simplificada."
+
+        final_msg += f"Validador Utilizado: {validator_used}\n"
+        final_msg += f"Resultado: {msg}\n\n"
         final_msg += "✅ CONSULTA VÁLIDA!" if is_valid else "❌ CONSULTA INVÁLIDA!"
-        self.root.after(0, lambda: (self.validação_sql_text.delete("1.0", tk.END), self.validação_sql_text.insert(tk.END, final_msg)))
+        
+        self.root.after(0, lambda: (self.validação_sql_text.delete("1.0", tk.END), 
+                                    self.validação_sql_text.insert(tk.END, final_msg)))
 
     def processar_consulta(self):
         sql_query = self.sql_entry.get("1.0", tk.END).strip()
-        if not sql_query: return messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
-        self.limpar_resultados(); self.álgebra_relacional_text.insert(tk.END, "Processando...")
+        if not sql_query: 
+            messagebox.showwarning("Aviso", "Digite uma consulta SQL.")
+            return
+
+        # Etapa de validação antes de processar, usando a mesma lógica do botão "Validar"
+        if self.query_processor:
+            is_valid, msg = self.query_processor.validate_query(sql_query)
+        else:
+            is_valid, msg = self.converter.validate_sql_syntax(sql_query)
+
+        if not is_valid:
+            messagebox.showerror("Consulta Inválida", f"A consulta SQL é inválida e não pode ser processada.\n\nMotivo: {msg}")
+            return
+        
+        self.limpar_resultados()
+        self.álgebra_relacional_text.insert(tk.END, "Processando...")
         threading.Thread(target=self._processar_consulta_thread, args=(sql_query,), daemon=True).start()
 
     def _processar_consulta_thread(self, sql_query):
@@ -158,11 +210,15 @@ class ProcessadorConsultasGUI:
         algebra_str = self.converter.convert(sql)
         opt_log = self.converter.get_optimization_log()
         plan = self._generate_optimized_execution_plan(sql)
+        
         self.álgebra_relacional_text.delete("1.0", tk.END)
         self.álgebra_relacional_text.insert(tk.END, f"SQL Original:\n{sql}\n\nExpressão (Não Otimizada):\n{algebra_str}\n\n{'='*70}\nOTIMIZAÇÕES APLICADAS:\n{opt_log}")
-        self.plano_de_execução_text.delete("1.0", tk.END); self.plano_de_execução_text.insert(tk.END, plan)
+        
+        self.plano_de_execução_text.delete("1.0", tk.END)
+        self.plano_de_execução_text.insert(tk.END, plan)
+        
         self.atualizar_grafo_visual()
-        self.notebook.select(2)
+        self.notebook.select(2) # Mudar para a aba do Grafo Visual
 
     def atualizar_grafo_visual(self):
         if not self.current_sql: return
@@ -171,16 +227,20 @@ class ProcessadorConsultasGUI:
             is_optimized = self.graph_view_var.get() == "optimized"
             tree = self.current_optimized_tree if is_optimized else self.current_unoptimized_tree
             title_suffix = "OTIMIZADA" if is_optimized else "NÃO OTIMIZADA"
-            badge_color = '#27ae60' if is_optimized else '#e74c3c'
+            badge_color = self.node_styles['selection']['c'] if is_optimized else self.node_styles['join']['c']
+            
             G = nx.DiGraph()
             self.converter.node_counter = 0
             pos_dict, colors, labels, shapes = {}, {}, {}, {}
             root_id = self.converter._add_nodes_to_graph(tree, G, pos_dict, colors, labels, shapes)
             pos = self.converter._calculate_improved_positions(G, root_id)
+            
             self._desenhar_grafo_integrado(G, pos, colors, labels, self.current_sql, title_suffix, badge_color)
             self.graph_canvas.draw()
         except Exception as e:
-            self.graph_ax.text(0.5, 0.5, f'Erro ao gerar grafo:\n{e}', ha='center', va='center', color='red')
+            self.graph_ax.clear()
+            self.graph_ax.text(0.5, 0.5, f'Erro ao gerar o grafo:\n{e}', ha='center', va='center', color='red')
+            self.graph_ax.axis('off')
             self.graph_canvas.draw()
 
     def _desenhar_texto_com_sombra(self, x, y, text, **kwargs):
@@ -191,40 +251,44 @@ class ProcessadorConsultasGUI:
         self.graph_ax.text(x, y, text, **text_props, color='white', zorder=zorder)
 
     def _desenhar_grafo_integrado(self, G, pos, node_colors, node_labels, sql_query, title_suffix, badge_color):
-        styles = {'projection': {'c': '#9c27b0', 'ico': 'π'}, 'selection': {'c': '#4caf50', 'ico': 'σ'}, 'join': {'c': '#f44336', 'ico': '⨝'}, 'rename': {'c': '#ff9800', 'ico': 'ρ'}, 'table': {'c': '#2196f3', 'ico': 'T'}}
+        styles = self.node_styles
         for node in G.nodes():
-            x, y = pos[node]; node_type = node_colors[node]; style = styles[node_type]; label = node_labels[node]
+            x, y = pos[node]; node_type = node_colors.get(node, 'table'); style = styles[node_type]; label = node_labels.get(node, '')
             shape = {'projection': 'circle', 'join': 'diamond'}.get(node_type, 'rect')
-            s_off = 0.06
+            s_off = 0.05
+            
             if shape == 'circle':
-                self.graph_ax.add_patch(patches.Circle((x + s_off, y - s_off), 0.5, fc='gray', alpha=0.3))
-                self.graph_ax.add_patch(patches.Circle((x, y), 0.5, fc=style['c'], ec='white', lw=3, zorder=3))
+                self.graph_ax.add_patch(patches.Circle((x + s_off, y - s_off), 0.5, fc='black', alpha=0.2))
+                self.graph_ax.add_patch(patches.Circle((x, y), 0.5, fc=style['c'], ec='white', lw=2.5, zorder=3))
             elif shape == 'diamond':
                 points = [[x, y + 0.65], [x + 0.55, y], [x, y - 0.65], [x - 0.55, y]]
-                self.graph_ax.add_patch(patches.Polygon([[p[0]+s_off, p[1]-s_off] for p in points], fc='gray', alpha=0.3))
-                self.graph_ax.add_patch(patches.Polygon(points, fc=style['c'], ec='white', lw=3, zorder=3))
+                self.graph_ax.add_patch(patches.Polygon([[p[0]+s_off, p[1]-s_off] for p in points], fc='black', alpha=0.2))
+                self.graph_ax.add_patch(patches.Polygon(points, fc=style['c'], ec='white', lw=2.5, zorder=3))
             else:
-                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7+s_off, y-0.45-s_off), 1.4, 0.9, boxstyle="round,pad=0.1", fc='gray', alpha=0.3))
-                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7, y-0.45), 1.4, 0.9, boxstyle="round,pad=0.1", fc=style['c'], ec='white', lw=3, zorder=3))
+                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7+s_off, y-0.45-s_off), 1.4, 0.9, boxstyle="round,pad=0.1", fc='black', alpha=0.2))
+                self.graph_ax.add_patch(patches.FancyBboxPatch((x-0.7, y-0.45), 1.4, 0.9, boxstyle="round,pad=0.1", fc=style['c'], ec='white', lw=2.5, zorder=3))
             
-            # --- BLOCO CORRIGIDO ---
             common_props = {'ha': 'center', 'fontweight': 'bold', 'zorder': 5}
             if node_type == 'table':
                 props = {**common_props, 'va': 'center', 'fontsize': 11}
                 self._desenhar_texto_com_sombra(x, y, self._wrap_label(label, 15), **props)
             else:
-                details = '\n'.join(label.split('\n')[1:])
-                # Propriedades para o ícone
+                parts = label.split('\n')
+                icon = style['ico']
+                details = '\n'.join(parts[1:])
                 icon_props = {**common_props, 'va': 'center', 'fontsize': 18}
-                self._desenhar_texto_com_sombra(x, y + 0.18, style['ico'], **icon_props)
-                # Propriedades para o texto de detalhes (aqui estava o erro)
+                self._desenhar_texto_com_sombra(x, y + 0.18, icon, **icon_props)
                 details_props = {**common_props, 'va': 'top', 'fontsize': 10}
                 self._desenhar_texto_com_sombra(x, y - 0.15, self._wrap_label(details, 20), **details_props)
-            # --- FIM DO BLOCO CORRIGIDO ---
 
+        for edge in G.edges():
+            pos_start, pos_end = pos[edge[0]], pos[edge[1]]
+            shadow_offset = [0.03, -0.03]
+            pos_start_shadow = (pos_start[0] + shadow_offset[0], pos_start[1] + shadow_offset[1])
+            pos_end_shadow = (pos_end[0] + shadow_offset[0], pos_end[1] + shadow_offset[1])
+            self.graph_ax.add_patch(patches.FancyArrowPatch(pos_start_shadow, pos_end_shadow, connectionstyle="arc3,rad=0.15", arrowstyle="-|>", mutation_scale=25, color='#000000', alpha=0.2, lw=2.5, zorder=1))
+            self.graph_ax.add_patch(patches.FancyArrowPatch(pos_start, pos_end, connectionstyle="arc3,rad=0.15", arrowstyle="-|>", mutation_scale=25, color='#34495e', lw=2.5, zorder=2))
 
-        for edge in G.edges(): self.graph_ax.add_patch(patches.FancyArrowPatch(pos[edge[0]], pos[edge[1]], connectionstyle="arc3,rad=0.1", arrowstyle="-|>", mutation_scale=25, color='#34495e', lw=2.5, zorder=2))
-        
         subtitle = f'{sql_query[:70]}{"..." if len(sql_query) > 70 else ""}'
         self.graph_ax.text(0.5, 0.97, f'Grafo de Álgebra Relacional - {title_suffix}', transform=self.graph_ax.transAxes, fontsize=16, fontweight='bold', ha='center', va='top', bbox=dict(boxstyle="round,pad=0.3", fc=badge_color, ec='white', lw=2), color='white')
         self.graph_ax.text(0.5, 0.92, subtitle, transform=self.graph_ax.transAxes, fontsize=11, ha='center', va='top', style='italic', color='#34495e')
@@ -236,25 +300,28 @@ class ProcessadorConsultasGUI:
             self.graph_ax.set_ylim(min(y_coords) - 1.5, max(y_coords) + 1.5)
 
     def _add_legend(self):
-        items = [{'icon': 'π', 'c': '#9c27b0', 't': 'Projeção'}, {'icon': 'σ', 'c': '#4caf50', 't': 'Seleção'}, {'icon': '⨝', 'c': '#f44336', 't': 'Junção'}, {'icon': 'ρ', 'c': '#ff9800', 't': 'Renomeação'}, {'icon': 'T', 'c': '#2196f3', 't': 'Tabela'}]
-        lx, ly = -0.10, 0.96 # Posição inicial da legenda (canto superior esquerdo)
+        items = [{'icon': v['ico'], 'c': v['c'], 't': v['label']} for k, v in self.node_styles.items()]
+        lx, ly = -0.12, 0.98
 
-        box_width = 0.04
-        title_x_offset = 0.11
-        icon_x_offset = 0.03
-        text_x_offset = 0.07
-      
+        height = (len(items) + 1) * 0.05
+        width = 0.2
+        shadow_offset = [0.008, -0.008]
 
-        bg_patch = patches.FancyBboxPatch((lx-0.01, ly - len(items)*0.05 - 0.03), box_width, len(items)*0.05 + 0.05, boxstyle="round,pad=0.01", fc='white', ec='#bdc3c7', alpha=0.95, transform=self.graph_ax.transAxes, zorder=10)
+        shadow_patch = patches.FancyBboxPatch((lx - 0.01 + shadow_offset[0], ly - height - 0.03 + shadow_offset[1]), width, height, boxstyle="round,pad=0.02", fc='black', ec=None, alpha=0.2, transform=self.graph_ax.transAxes, zorder=9)
+        self.graph_ax.add_patch(shadow_patch)
+        bg_patch = patches.FancyBboxPatch((lx - 0.01, ly - height - 0.03), width, height, boxstyle="round,pad=0.02", fc='#fdfefd', ec='#bdc3c7', alpha=0.95, transform=self.graph_ax.transAxes, zorder=10)
         self.graph_ax.add_patch(bg_patch)
 
-        self.graph_ax.text(lx + title_x_offset, ly, 'Operadores', transform=self.graph_ax.transAxes, fontsize=11, fontweight='bold', ha='center', zorder=11)
+        title_x = lx + (width / 2) - 0.01
+        icon_x = lx + 0.03
+        text_x = lx + 0.07
+
+        self.graph_ax.text(title_x, ly - 0.02, 'Operadores', transform=self.graph_ax.transAxes, fontsize=11, fontweight='bold', ha='center', va='top', zorder=11)
         for i, item in enumerate(items):
-            y_pos = ly - (i + 1) * 0.048
-            self.graph_ax.text(lx + icon_x_offset, y_pos, item['icon'], transform=self.graph_ax.transAxes, fontsize=14, color=item['c'], ha='center', va='center', fontweight='bold', zorder=11)
-            self.graph_ax.text(lx + text_x_offset, y_pos, item['t'], transform=self.graph_ax.transAxes, fontsize=10, ha='left', va='center', zorder=11)
-            
-            
+            y_pos = ly - (i + 1.5) * 0.048
+            self.graph_ax.text(icon_x, y_pos, item['icon'], transform=self.graph_ax.transAxes, fontsize=14, color=item['c'], ha='center', va='center', fontweight='bold', zorder=11)
+            self.graph_ax.text(text_x, y_pos, item['t'], transform=self.graph_ax.transAxes, fontsize=10, ha='left', va='center', zorder=11)
+
     def _wrap_label(self, text, width):
         words = text.split(); lines, current_line = [], []
         for word in words:
@@ -281,13 +348,20 @@ class ProcessadorConsultasGUI:
             plan = f"PLANO DE EXECUÇÃO OTIMIZADO PARA:\n{sql_query}\n{'='*80}\n\n"
             parsed = self.converter._parse_sql(sql_query)
             if not parsed: return "Erro ao gerar plano."
+            
             base_info, joins = self.converter._parse_from_clause(parsed.get('from_clause', ''))
             where = parsed.get('where'); cols = parsed.get('columns', '*')
+            
             step = 1
-            if where: plan += f"{step}. SELEÇÃO (σ) IMEDIATA:\n   - Condição: {where}\n   - Otimização: Filtra dados na fonte, reduzindo o volume para as próximas etapas.\n\n"; step += 1
-            if cols != '*': plan += f"{step}. PROJEÇÃO (π) ANTECIPADA:\n   - Colunas: {cols}\n   - Otimização: Remove colunas desnecessárias cedo, diminuindo o uso de memória.\n\n"; step += 1
-            for i, join in enumerate(joins): plan += f"{step}. JUNÇÃO (⨝) EFICIENTE #{i+1}:\n   - Tabelas: Com {join.get('join_table')}\n   - Condição: {join.get('join_on')}\n   - Otimização: Executa o join sobre dados já filtrados e projetados.\n\n"; step += 1
-            plan += f"{step}. RESULTADO FINAL:\n   - Agrega os resultados e retorna as colunas finais.\n"
+            if where:
+                plan += f"{step}. SELEÇÃO (σ) IMEDIATA:\n   - Condição: {where}\n   - Otimização: Filtra dados na fonte, reduzindo o volume para as próximas etapas.\n\n"; step += 1
+            if cols != '*':
+                plan += f"{step}. PROJEÇÃO (π) ANTECIPADA:\n   - Colunas: {cols}\n   - Otimização: Remove colunas desnecessárias cedo, diminuindo o uso de memória.\n\n"; step += 1
+            if base_info:
+                plan += f"{step}. ACESSO À TABELA BASE: {base_info.get('table')}\n   - Acessa a primeira tabela, aplicando filtros (σ) e projeções (π) se possível.\n\n"; step += 1
+            for i, join in enumerate(joins):
+                plan += f"{step}. JUNÇÃO (⨝) EFICIENTE #{i+1}:\n   - Tabelas: Com {join.get('join_table')}\n   - Condição: {join.get('join_on')}\n   - Otimização: Executa o join sobre dados já filtrados e projetados.\n\n"; step += 1
+            plan += f"{step}. RESULTADO FINAL:\n   - Agrega os resultados e retorna as colunas finais solicitadas.\n"
             return plan
         except Exception as e: return f"Erro ao gerar plano: {str(e)}"
 
