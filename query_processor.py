@@ -39,11 +39,50 @@ class QueryProcessor:
         return parts, "Parsing inicial bem-sucedido."
 
     def validate_query(self, query):
-        # Validação de sintaxe muito básica primeiro para erros óbvios
-        if re.search(r'\b(SELECT\s+SELECT|FROM\s+FROM|WHERE\s+WHERE)\b', query, re.IGNORECASE):
-            return False, "Erro de sintaxe: Palavra-chave duplicada (SELECT, FROM ou WHERE)."
+        # Limpar query
+        query_clean = ' '.join(query.strip().rstrip(';').split())
+        
+        # 1. Validação de sintaxe básica - erros óbvios
+        if re.search(r'\b(SELECT\s+SELECT|FROM\s+FROM|WHERE\s+WHERE|ON\s+ON|JOIN\s+JOIN)\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: Palavra-chave duplicada detectada."
+        
+        # 2. INNER JOIN duplicado
+        if re.search(r'\bINNER\s+JOIN\s+INNER\s+JOIN\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: 'INNER JOIN INNER JOIN' detectado."
+        
+        # 3. Operadores duplicados ou inválidos
+        if re.search(r'(>>|<<|==|> >|< <|\|\|)', query_clean):
+            return False, "Erro de sintaxe: Operador duplicado ou inválido (>>, <<, ==, > >, etc.)."
+        
+        # 4. Operadores lógicos duplicados ou inválidos
+        if re.search(r'\b(AND\s+OR|OR\s+AND|AND\s+AND|OR\s+OR)\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: Operadores lógicos inválidos (AND OR, OR AND, AND AND, OR OR)."
+        
+        # 5. WHERE usado como nome de tabela
+        if re.search(r'\bJOIN\s+WHERE\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: 'WHERE' não pode ser usado como nome de tabela."
+        
+        # 6. SELECT usado como valor
+        if re.search(r'=\s*SELECT\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: 'SELECT' usado incorretamente como valor."
+        
+        # 7. ON usado sem JOIN
+        if re.search(r'\bFROM\s+\w+\s+ON\b', query_clean, re.IGNORECASE) and not re.search(r'\bJOIN\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: 'ON' usado sem JOIN."
+        
+        # 8. WHERE entre FROM e ON
+        if re.search(r'\bFROM\s+.*?\s+WHERE\s+.*?\s+ON\b', query_clean, re.IGNORECASE):
+            return False, "Erro de sintaxe: 'WHERE' não pode aparecer entre FROM e ON."
+        
+        # 9. Parênteses incorretos na lista de colunas
+        columns_match = re.match(r'SELECT\s+(.*?)\s+FROM', query_clean, re.IGNORECASE)
+        if columns_match:
+            columns_part = columns_match.group(1)
+            if re.search(r'(?<!\w)\(\s*\w+\s*\)(?!\s*\()', columns_part):
+                if not re.search(r'\w+\s*\(\s*\w+\s*\)', columns_part):
+                    return False, "Erro de sintaxe: Parênteses incorretos na lista de colunas."
 
-        parsed, msg = self._parse_sql(query)
+        parsed, msg = self._parse_sql(query_clean)
         if parsed is None:
             return False, msg
 
@@ -63,7 +102,6 @@ class QueryProcessor:
             if not is_valid:
                 return False, msg_where
         
-        # CORREÇÃO: Garante que um tuple seja retornado em caso de sucesso
         return True, "Consulta válida."
 
     def _validate_from_clause(self, from_clause_str):
@@ -115,16 +153,36 @@ class QueryProcessor:
 
         column_list = [col.strip() for col in columns_str.split(',') if col.strip()]
         
+        # Verificar se há vírgulas consecutivas ou mal colocadas
+        if ',,' in columns_str or columns_str.startswith(',') or columns_str.endswith(','):
+            return False, "Lista de colunas malformada: vírgulas incorretas."
+        
         for col_ident in column_list:
+            # Verificar palavras reservadas
             if col_ident.upper() in self.reserved_keywords:
                 return False, f"Palavra reservada '{col_ident}' não pode ser usada como nome de coluna."
-            # A validação de coluna individual é opcional e pode ser expandida aqui se necessário
+            
+            # Verificar parênteses sem função
+            if re.match(r'^\(\s*\w+\s*\)$', col_ident) and not re.match(r'^\w+\s*\(.*\)$', col_ident):
+                return False, f"Sintaxe inválida na coluna: '{col_ident}'. Parênteses incorretos."
         
         return True, "Colunas SELECT válidas."
 
     def _validate_where_on_clause(self, clause_str, tables_in_query, clause_name):
-        # Esta é uma validação simplificada que pode ser expandida
-        # A lógica aqui apenas garante que não há erros óbvios.
+        # Esta é uma validação mais robusta de cláusulas WHERE e ON
         if not clause_str.strip():
             return False, f"Cláusula {clause_name} está vazia."
+        
+        # Verificar operadores lógicos duplicados
+        if re.search(r'\b(AND\s+OR|OR\s+AND|AND\s+AND|OR\s+OR)\b', clause_str, re.IGNORECASE):
+            return False, f"Cláusula {clause_name} inválida: Operadores lógicos duplicados ou incorretos."
+        
+        # Verificar operadores de comparação duplicados
+        if re.search(r'(>>|<<|> >|< <|==)', clause_str):
+            return False, f"Cláusula {clause_name} inválida: Operador de comparação duplicado ou inválido."
+        
+        # Verificar palavras-chave SQL usadas como valores
+        if re.search(r'=\s*(SELECT|FROM|WHERE|JOIN)\b', clause_str, re.IGNORECASE):
+            return False, f"Cláusula {clause_name} inválida: Palavra-chave SQL usada como valor."
+        
         return True, f"Cláusula {clause_name} válida."
