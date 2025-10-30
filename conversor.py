@@ -30,14 +30,18 @@ class RelationalAlgebraConverter:
         """
         # Pattern para detectar INNER JOINs
         join_pattern = re.compile(
-            r"INNER\s+JOIN\s+(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+(?P<join_on>.*?)(?=\s+INNER\s+JOIN|$)",
+            r"\s+(?:(?P<join_type>INNER|LEFT|RIGHT|FULL|CROSS)\s+)?JOIN\s+"
+            r"(?P<join_table>\w+)(?:\s+(?:AS\s+)?(?P<join_alias>\w+))?\s+ON\s+"
+            r"(?P<join_on>.*?)(?=\s+(?:(?:INNER|LEFT|RIGHT|FULL|CROSS)\s+)?JOIN|$)",
             re.IGNORECASE | re.DOTALL
         )
         
         # Extrair tabela base
         base_table_match = re.match(
-            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>(?!INNER\b)\w+))?", 
-            from_str, 
+            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>"
+            r"(?!SELECT\b)(?!FROM\b)(?!WHERE\b)(?!JOIN\b)(?!INNER\b)"
+            r"(?!LEFT\b)(?!RIGHT\b)(?!FULL\b)(?!CROSS\b)\w+))?",
+            from_str,
             re.IGNORECASE
         )
         
@@ -47,7 +51,7 @@ class RelationalAlgebraConverter:
         base_table_info = base_table_match.groupdict()
         remaining_from_clause = from_str[base_table_match.end():]
         
-        # Extrair todos os JOINs
+        # Extrair todos os JOINs compatíveis
         joins = [m.groupdict() for m in join_pattern.finditer(remaining_from_clause)]
         
         return base_table_info, joins
