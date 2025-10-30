@@ -145,18 +145,194 @@ class QueryOptimizer:
         return tree, False
     
     def _apply_join_reordering(self, tree):
-        """HEURÍSTICA 3: Reordenação de JOINs"""
+        """HEURÍSTICA 3: Reordenação de JOINs (implementação simples e segura)"""
         self.optimization_log.append("\n[HEURÍSTICA 3] Reordenação de JOINs:")
-        self.optimization_log.append("  ✓ Lógica de reordenação aplicada (atualmente simbólica).")
-        self.optimization_log.append("    → Benefício: Minimiza o tamanho de resultados intermediários.")
-        return tree # A reordenação real é complexa; esta implementação é simbólica.
-    
+        # Funções auxiliares locais
+        def is_join_node(n):
+            return not isinstance(n, str) and n and n[0] == '⨝'
+
+        def collect_join_info(node):
+            """
+            Flatten join tree into a list of relation-subtrees and coletar todas as condições de join.
+            Retorna (rel_list, join_conditions) onde:
+            - rel_list: lista de subtrees (cada subtree = relação ou operador aplicado sobre relação)
+            - join_conditions: lista de strings de condições que envolvem >=2 tabelas
+            """
+            rels = []
+            join_conds = []
+
+            def recurse(n):
+                if isinstance(n, str):
+                    rels.append(n)
+                    return
+                op = n[0]
+                if op == 'σ':
+                    # Se a seleção envolve múltiplas tabelas, pode conter condição de join aplicada acima
+                    cond = n[1]
+                    subt = n[2]
+                    subt_tables = self._get_all_tables(subt)
+                    conds = self._split_conditions(cond)
+                    for c in conds:
+                        if len(self._get_tables_in_condition(c)) >= 2:
+                            join_conds.append(c)
+                        # Não separa aqui; seleção fica junto com sua subtree
+                    recurse(subt if isinstance(subt, str) else (subt))
+                    # mantemos a seleção envolta como parte do subtree correspondente,
+                    # mas já contabilizamos condições de join se existirem.
+                    return
+                if op == '⨝':
+                    # coletar condição do próprio nó
+                    if n[1]:
+                        join_conds.extend([c for c in self._split_conditions(n[1]) if len(self._get_tables_in_condition(c)) >= 2])
+                    # flatten both lados
+                    recurse(n[2])
+                    recurse(n[3])
+                    return
+                # π, ρ ou outros: considerar como operador aplicado sobre uma relação
+                if op in ['π', 'ρ']:
+                    # Representar o subtree inteiro como uma unidade (mantemos operadores aplicados)
+                    # para evitar perder projeções/renames
+                    rels.append(n)
+                    return
+                # Qualquer outro nó: recursão segura
+                try:
+                    for child in n[2:]:
+                        recurse(child)
+                except Exception:
+                    pass
+
+            recurse(node)
+            return rels, join_conds
+
+        def estimate_size(subtree, join_conditions):
+            """
+            Estimativa muito simples de cardinalidade:
+            - base size 1000 por tabela
+            - reduz por cada seleção condicional sobre a tabela (fator 0.1)
+            - reduz um pouco se houver muitas colunas de join (sugere seletividade)
+            """
+            tables = self._get_all_tables(subtree)
+            base = 1000 * max(1, len(tables))
+            # contar quantas condições de seleção (σ) existem aplicadas dentro do subtree
+            sel_count = 0
+            def count_sel(n):
+                nonlocal sel_count
+                if isinstance(n, str): return
+                if n[0] == 'σ':
+                    sel_count += len(self._split_conditions(n[1]))
+                    count_sel(n[2])
+                elif n[0] in ['π', 'ρ']:
+                    count_sel(n[2])
+                elif n[0] == '⨝':
+                    count_sel(n[2]); count_sel(n[3])
+            count_sel(subtree)
+            size = base * (0.1 ** sel_count)
+            # se existirem join conditions que tocam essas tabelas, reduz um pouco mais
+            for c in join_conditions:
+                involved = self._get_tables_in_condition(c)
+                if involved and involved.issubset(tables):
+                    size *= 0.5
+            return max(1, size)
+
+        # Se não há joins, nada a fazer
+        if not is_join_node(tree):
+            self.optimization_log.append("  - Nenhum JOIN encontrado para reordenar.")
+            return tree
+
+        # Coletar relações e condições
+        rels, join_conds = collect_join_info(tree)
+
+        # Criar lista com estimativas
+        rel_info = []
+        for r in rels:
+            rel_tables = self._get_all_tables(r) if not isinstance(r, str) else {r}
+            est = estimate_size(r, join_conds)
+            rel_info.append({'subtree': r, 'tables': rel_tables, 'est': est})
+
+        # Ordenação inicial por estimativa crescente (menores primeiro)
+        rel_info.sort(key=lambda x: x['est'])
+
+        # Reconstruir joins greedy: sempre tentar anexar uma relação que compartilha condição com o conjunto atual
+        used = [rel_info[0]]
+        remaining = rel_info[1:]
+        constructed_tree = used[0]['subtree']
+
+        while remaining:
+            attached = False
+            for i, rinfo in enumerate(remaining):
+                # procurar se existe condição ligando alguma tabela de constructed_tree com rinfo
+                found_conds = []
+                for c in join_conds:
+                    tables_in_c = self._get_tables_in_condition(c)
+                    if tables_in_c & self._get_all_tables(constructed_tree) and tables_in_c & rinfo['tables']:
+                        found_conds.append(c)
+                if found_conds:
+                    # combinar condições que ligam os dois conjuntos
+                    cond_str = ' ∧ '.join(found_conds)
+                    constructed_tree = ('⨝', cond_str, constructed_tree, rinfo['subtree'])
+                    # remover essas condições da lista global para não reaplicar
+                    join_conds = [c for c in join_conds if c not in found_conds]
+                    remaining.pop(i)
+                    attached = True
+                    break
+            if not attached:
+                # Não encontrou condição de ligação — simplesmente anexa a próxima menor
+                rinfo = remaining.pop(0)
+                # sem condição explícita, usar string vazia (cross join) — mantemos consistência
+                constructed_tree = ('⨝', '', constructed_tree, rinfo['subtree'])
+
+        self.optimization_log.append("  ✓ JOINs reordenados usando heurística gulosa baseada em estimativas simples.")
+        self.optimization_log.append("    → Ordem construída (pequenas primeiras) para reduzir intermediários.")
+        return constructed_tree
+
     def _select_efficient_algorithms(self, tree):
-        """HEURÍSTICA 4: Seleção de Algoritmos Eficientes"""
+        """HEURÍSTICA 4: Seleção de Algoritmos Eficientes para operações (marca joins com algoritmo)"""
         self.optimization_log.append("\n[HEURÍSTICA 4] Seleção de Algoritmos Eficientes:")
-        self.optimization_log.append("  ✓ Algoritmo Hash Join selecionado para junções (simbólico).")
-        self.optimization_log.append("    → Benefício: Reduz a complexidade de O(n²) para O(n) em grandes datasets.")
-        return tree # A marcação do algoritmo é simbólica.
+
+        def choose_algo_for_condition(cond):
+            # Detecta igualdade direta entre colunas de tabelas diferentes => Hash Join
+            if not cond or not cond.strip():
+                return 'nested_loop'  # cross-join fallback
+            eqs = re.findall(r'(\w+\.\w+)\s*=\s*(\w+\.\w+)', cond)
+            for left_col, right_col in eqs:
+                left_table = left_col.split('.')[0]
+                right_table = right_col.split('.')[0]
+                if left_table != right_table:
+                    return 'hash_join'
+            # Se não for igualdade entre tabelas diferentes, preferir nested loop
+            return 'nested_loop'
+
+        def annotate(node):
+            if isinstance(node, str):
+                return node
+            op = node[0]
+            if op in ['π', 'ρ', 'σ']:
+                return (op, node[1], annotate(node[2]))
+            if op == '⨝':
+                # Pode haver um algoritmo já armazenado na posição 4; manter se presente
+                cond = node[1]
+                left = annotate(node[2])
+                right = annotate(node[3])
+                algo = choose_algo_for_condition(cond)
+                # Retornar um nó com 5 posições: ('⨝', cond, left, right, algo)
+                self.optimization_log.append(f"  • Junção entre [{', '.join(sorted(self._get_all_tables(left)))}] "
+                                             f"e [{', '.join(sorted(self._get_all_tables(right)))}] "
+                                             f"=> algoritmo selecionado: {algo}")
+                # Manter possíveis condições já presentes (node[1]) e adicionar algoritmo como elemento extra
+                return ('⨝', cond, left, right, algo)
+            # Qualquer outro nó — aplicar recursão segura para filhos
+            try:
+                # reconstrói genérico: mantém estrutura e aplica annotate a possíveis filhos
+                new_children = []
+                for child in node[1:]:
+                    new_children.append(annotate(child) if not isinstance(child, str) else child)
+                return tuple([node[0]] + new_children)
+            except Exception:
+                return node
+
+        new_tree = annotate(tree)
+        self.optimization_log.append("  ✓ Algoritmos selecionados para junções (hash quando aplicável, nested loop caso contrário).")
+        return new_tree
     
     # --- Métodos Auxiliares ---
     
