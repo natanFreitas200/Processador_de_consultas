@@ -101,8 +101,8 @@ def test_invalid_queries():
     
     valid_queries = [
         "SELECT Nome, Email FROM Cliente WHERE idade > 25;",
-        "SELECT * FROM Cliente INNER JOIN Pedidos ON Cliente.id = Pedidos.cliente_id;",
-        "SELECT c.nome, p.valor FROM cliente c INNER JOIN pedidos p ON c.id = p.cliente_id WHERE p.valor > 500;",
+        "SELECT * FROM Cliente INNER JOIN Pedido ON Cliente.id = Pedido.Cliente_idCliente;",
+    "SELECT c.Nome, p.ValorTotalPedido FROM Cliente c INNER JOIN Pedido p ON c.idCliente = p.Cliente_idCliente WHERE p.ValorTotalPedido > 500;",
     ]
     
     valid_passed = 0
