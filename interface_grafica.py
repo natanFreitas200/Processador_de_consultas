@@ -40,7 +40,7 @@ class ProcessadorConsultasGUI:
         self.node_styles = {
             'projection': {'c': '#8e44ad', 'ico': 'π', 'label': 'Projeção'},
             'selection':  {'c': '#27ae60', 'ico': 'σ', 'label': 'Seleção'},
-            'join':       {'c': '#c0392b', 'ico': 'JOIN', 'label': 'Junção'},
+            'join':       {'c': '#c0392b', 'ico': '|X|', 'label': 'Junção'},
             'rename':     {'c': '#f39c12', 'ico': 'ρ', 'label': 'Renomeação'},
             'table':      {'c': '#2980b9', 'ico': 'T', 'label': 'Tabela'}
         }
