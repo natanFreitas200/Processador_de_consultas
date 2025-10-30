@@ -65,44 +65,78 @@ class QueryProcessor:
         return True, "Consulta válida."
 
     def _validate_from_clause(self, from_clause_str):
-        """
-        Valida a cláusula FROM, incluindo JOINs e garantindo que não há texto extra.
-        """
-        
+        """Valida a cláusula FROM, incluindo JOINs opcionais."""
+
         tables_map = {}
-        
+
         # Valida tabela base
-        base_match = re.match(r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>\w+))?", from_clause_str, re.IGNORECASE)
+        base_match = re.match(
+            r"^(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>"
+            r"(?!SELECT\b)(?!FROM\b)(?!WHERE\b)(?!JOIN\b)(?!INNER\b)"
+            r"(?!LEFT\b)(?!RIGHT\b)(?!FULL\b)(?!CROSS\b)\w+))?",
+            from_clause_str,
+            re.IGNORECASE
+        )
         if not base_match:
-            return False, None, "Cláusula FROM malformada: Tabela base não encontrada."
-        
+            return False, None, "Cláusula FROM malformada: tabela base não encontrada."
+
         base_table_name = base_match.group('table')
         if base_table_name.upper() in self.reserved_keywords:
-             return False, None, f"Erro de sintaxe: Palavra-chave '{base_table_name}' não pode ser usada como nome de tabela."
+            return False, None, f"Erro de sintaxe: '{base_table_name}' é uma palavra-chave reservada."
         if self.schema and base_table_name.lower() not in [k.lower() for k in self.schema.keys()]:
             return False, None, f"A tabela '{base_table_name}' não existe no banco de dados."
+
         tables_map[base_match.group('alias') or base_table_name] = base_table_name
-        last_index = base_match.end()
-        
-        # Valida JOINs
-        join_pattern = re.compile(r"\s+INNER\s+JOIN\s+\w+", re.IGNORECASE)
+
+        remaining_from = from_clause_str[base_match.end():]
+
+        join_pattern = re.compile(
+            r"\s+(?:(?P<join_type>INNER|LEFT|RIGHT|FULL|CROSS)\s+)?JOIN\s+"
+            r"(?P<table>\w+)(?:\s+(?:AS\s+)?(?P<alias>\w+))?\s+ON\s+"
+            r"(?P<on_clause>.*?)(?=(?:\s+(?:(?:INNER|LEFT|RIGHT|FULL|CROSS)\s+)?JOIN\s+)|\s*$)",
+            re.IGNORECASE | re.DOTALL
+        )
         on_pattern = re.compile(r"\s+ON\s+", re.IGNORECASE)
-        
-        # CHECK 2: Se tem JOIN, precisa ter ON. Se tem ON, precisa ter JOIN.
-        has_join = bool(join_pattern.search(from_clause_str))
-        has_on = bool(on_pattern.search(from_clause_str))
+
+        has_join = bool(join_pattern.search(remaining_from))
+        has_on = bool(on_pattern.search(remaining_from))
         if has_join != has_on:
             if has_join:
-                return False, None, "Erro de sintaxe: INNER JOIN requer uma cláusula ON."
-            else:
-                 return False, None, "Erro de sintaxe: Cláusula ON utilizada sem INNER JOIN."
+                return False, None, "Erro de sintaxe: JOIN sem cláusula ON correspondente."
+            return False, None, "Erro de sintaxe: Cláusula ON utilizada sem JOIN."
 
-        # CHECK 3: Pega erros como "SELECT * FROM Cliente Nome = 'A'"
-        # Usamos uma regex para encontrar a última parte válida (tabela ou cláusula ON)
-        valid_from_pattern = re.compile(r"(\w+(\s+(AS\s+)?\w+)?(\s+INNER\s+JOIN\s+\w+(\s+(AS\s+)?\w+)?\s+ON\s+.+)*)")
-        match = valid_from_pattern.match(from_clause_str)
-        if not match or match.group(0) != from_clause_str:
-            return False, None, "Erro de sintaxe: Texto inesperado após a cláusula FROM. Faltou um 'WHERE'?"
+        last_end = 0
+        for join_match in join_pattern.finditer(remaining_from):
+            # Verifica texto inesperado entre joins
+            gap_text = remaining_from[last_end:join_match.start()]
+            if gap_text.strip():
+                return False, None, "Erro de sintaxe: Texto inesperado na cláusula FROM."
+
+            join_table = join_match.group('table')
+            join_alias_raw = join_match.group('alias')
+            if join_alias_raw and join_alias_raw.upper() in self.reserved_keywords:
+                return False, None, f"Erro de sintaxe: '{join_alias_raw}' não pode ser usado como alias."
+
+            join_alias = join_alias_raw or join_table
+            on_clause = join_match.group('on_clause').strip()
+
+            if join_table.upper() in self.reserved_keywords:
+                return False, None, f"Erro de sintaxe: '{join_table}' é uma palavra-chave reservada."
+            if self.schema and join_table.lower() not in [k.lower() for k in self.schema.keys()]:
+                return False, None, f"A tabela '{join_table}' do JOIN não existe no banco de dados."
+            if not on_clause:
+                return False, None, "Erro de sintaxe: Cláusula ON vazia no JOIN."
+
+            ok, msg = self._validate_where_on_clause(on_clause)
+            if not ok:
+                return False, None, msg
+
+            tables_map[join_alias] = join_table
+            last_end = join_match.end()
+
+        # Verifica se sobrou texto não processado após o último JOIN
+        if remaining_from[last_end:].strip():
+            return False, None, "Erro de sintaxe: Texto inesperado após a cláusula FROM."
 
         return True, tables_map, "Cláusula FROM válida."
 
@@ -125,7 +159,11 @@ class QueryProcessor:
             if col.upper() in self.reserved_keywords:
                  return False, f"Erro de sintaxe: Palavra-chave reservada '{col}' não pode ser usada como nome de coluna."
 
-            # CHECK 6: Pega erros como "Nome Email" em vez de "Nome, Email"
+            # CHECK 6: Detecta parênteses isolados sem função (e.g., '(Email)')
+            if re.match(r"^\(\s*\w+\s*\)$", col) and not re.match(r"^\w+\s*\(.*\)$", col):
+                return False, f"Erro de sintaxe: Parênteses inapropriados na coluna '{col}'."
+
+            # CHECK 7: Pega erros como "Nome Email" em vez de "Nome, Email"
             parts = col.split()
             if len(parts) > 1 and 'AS' not in [p.upper() for p in parts]:
                 return False, f"Erro de sintaxe na lista de colunas perto de '{col}'. Faltou uma vírgula?"
